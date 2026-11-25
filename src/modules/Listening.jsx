@@ -1,6 +1,8 @@
 // MODULE 2: Luyện nghe "Cai phụ đề" 3 bước (Blind → Gap-fill → Shadowing)
+import { today } from '../lib/date'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { situations, findSituation, TIERS } from '../data'
+import { useSituations, findSituation, TIERS } from '../data'
+import { scheduleReview, reviewOf, nextDueLabel } from '../lib/review'
 import { update, useStore, logHistory } from '../lib/store'
 import { speakLines, speak, stopSpeaking, useSpeechRecognition } from '../lib/speech'
 import { parseLine, plainLine, intonation, sameAnswer, similarity } from '../lib/text'
@@ -17,15 +19,19 @@ export default function Listening({ id }) {
 
 function ListeningList() {
   const progress = useStore((s) => s.listening)
+  const reviews = useStore((s) => s.reviews)
+  const situations = useSituations()
   return (
     <div>
-      <PageHeader title="🎧 Nghe “cai phụ đề”" subtitle="Mỗi bài 30–60 giây, tốc độ tự nhiên. 3 bước khoá cứng: Nghe mù → Điền chỗ nuốt âm → Shadowing." />
+      <PageHeader title="🎧 Nghe “cai phụ đề”" subtitle="Mỗi bài 30–60 giây, tốc độ tự nhiên. 3 bước khoá cứng: Nghe mù → Điền chỗ nuốt âm → Shadowing." right={<a className="btn-ghost" href="#/library">✨ Thêm bài mới</a>} />
       {[1, 2].map((tier) => (
         <div key={tier} className="mb-8">
           <div className="label mb-3">{TIERS[tier].label}</div>
           <div className="grid gap-3 sm:grid-cols-2">
             {situations.filter((s) => s.tier === tier).map((s) => {
               const p = progress[s.id]
+              const rv = reviews[`listening:${s.id}`]
+              const due = rv && rv.due <= today()
               return (
                 <a key={s.id} href={`#/listening/${s.id}`} className="card hover:border-indigo-300 hover:shadow transition flex items-center gap-4">
                   <div className="text-3xl">{s.emoji}</div>
@@ -33,7 +39,7 @@ function ListeningList() {
                     <div className="font-semibold">{s.titleVi}</div>
                     <div className="text-xs text-slate-500">{s.listening.speakers.A} · {s.listening.lines.length} lượt thoại</div>
                   </div>
-                  {p?.done ? <span className="chip bg-emerald-100 text-emerald-700">✓ Xong {p.count > 1 ? `×${p.count}` : ''}</span> : p?.step ? <span className="chip bg-amber-100 text-amber-800">Bước {p.step}/3</span> : null}
+                  {due ? <span className="chip bg-rose-100 text-rose-700">📅 Cần ôn</span> : p?.done ? <span className="chip bg-emerald-100 text-emerald-700" title={nextDueLabel(rv)}>✓ {nextDueLabel(rv)}</span> : p?.step ? <span className="chip bg-amber-100 text-amber-800">Bước {p.step}/3</span> : null}
                 </a>
               )
             })}
@@ -54,6 +60,7 @@ function Player({ sit }) {
   const [unlocked, setUnlocked] = useState(saved?.done ? 1 : saved?.step || 1)
   const [step, setStep] = useState(unlocked)
   const [playingLine, setPlayingLine] = useState(-1)
+  const [gapRatio, setGapRatio] = useState(1)
   const stopRef = useRef(false)
 
   useEffect(() => () => stopSpeaking(), [])
@@ -104,12 +111,14 @@ function Player({ sit }) {
         })}
       </div>
       {step === 1 && <BlindStep sit={sit} playAll={playAll} stop={stop} playingLine={playingLine} onNext={() => unlock(2)} />}
-      {step === 2 && <GapStep sit={sit} settings={settings} playAll={playAll} stop={stop} playingLine={playingLine} onNext={() => { markHeard(L.chunks.map((c) => c.en)); unlock(3) }} />}
+      {step === 2 && <GapStep sit={sit} settings={settings} playAll={playAll} stop={stop} playingLine={playingLine} onNext={(ratio) => { setGapRatio(ratio); markHeard(L.chunks.map((c) => c.en)); unlock(3) }} />}
       {step === 3 && (
         <ShadowStep
           sit={sit}
           settings={settings}
-          onDone={() => {
+          onDone={(avgShadow) => {
+            // Lịch ôn bài nghe: dựa trên % điền đúng và % shadowing
+            scheduleReview('listening', sit.id, 5 * (0.5 * gapRatio + 0.5 * Math.min(1, avgShadow / 85)), `${sit.emoji} ${sit.titleVi}`)
             update((s) => {
               const p = s.listening[sit.id] || (s.listening[sit.id] = { count: 0 })
               p.done = true
@@ -320,7 +329,7 @@ function GapStep({ sit, settings, playAll, stop, playingLine, onNext }) {
           ))}
           <div className="flex gap-2">
             <button className="btn-ghost" onClick={() => { setChecked(false); setVals({}) }}>Làm lại</button>
-            <button className="btn-primary" onClick={onNext}>Mở khoá Bước 3: Shadowing →</button>
+            <button className="btn-primary" onClick={() => onNext(gaps.length ? correctCount / gaps.length : 1)}>Mở khoá Bước 3: Shadowing →</button>
           </div>
         </div>
       )}
@@ -384,9 +393,10 @@ function ShadowStep({ sit, settings, onDone }) {
   useEffect(() => {
     if (allDone && !doneRef.current) {
       doneRef.current = true
-      onDone()
+      const vals = Object.values(scores).map((x) => x.sc)
+      onDone(vals.reduce((a, b) => a + b, 0) / Math.max(1, vals.length))
     }
-  }, [allDone, onDone])
+  }, [allDone, onDone, scores])
 
   useHotkeys({ r: () => listen(), s: () => shadow(), ArrowDown: () => setCur((c) => Math.min(L.lines.length - 1, c + 1)), ArrowUp: () => setCur((c) => Math.max(0, c - 1)) })
 
@@ -427,7 +437,7 @@ function ShadowStep({ sit, settings, onDone }) {
       </div>
       {allDone && (
         <div className="card border-emerald-300 bg-emerald-50">
-          <div className="font-semibold text-emerald-800">🎉 Hoàn thành bài nghe! Các cụm từ trong bài đã được chuyển sang trạng thái “Đã hiểu khi nghe”.</div>
+          <div className="font-semibold text-emerald-800">🎉 Hoàn thành bài nghe! Các cụm từ trong bài đã được chuyển sang trạng thái “Đã hiểu khi nghe”. Bài này đã được xếp lịch ôn lại tự động.</div>
           <div className="mt-2 text-sm text-emerald-700">Mẹo: shadow lại những câu dưới 75% thêm 2–3 lần, sau đó thử ở tốc độ 1.1×.</div>
           <div className="mt-3 flex gap-2">
             <a className="btn-primary" href="#/listening">Bài khác</a>

@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { useStore } from '../lib/store'
 import { today, lastNDays, fmtMin } from '../lib/date'
 import { stageCounts, isDue, STAGES } from '../lib/srs'
-import { situations } from '../data'
+import { getSituations } from '../data'
+import { dueReviews } from '../lib/review'
 import { PageHeader, Progress } from '../components/ui'
 
 const PLAN = [
@@ -61,12 +62,24 @@ export default function Dashboard() {
     if (fmtMin(s.time[d]?.total) >= 15) streak++
     else if (i > 0) break
   }
+  const situations = getSituations(s)
+  const lessonDue = dueReviews(s)
   const listenDone = situations.filter((x) => s.listening[x.id]?.done).length
   const roleplayDone = situations.filter((x) => s.roleplay[x.id]?.count).length
 
   return (
     <div>
       <PageHeader title="📊 Tổng quan hôm nay" subtitle="Mục tiêu: 60–120 phút/ngày, chia nhỏ 15–30 phút/phiên. Thời gian chỉ được tính khi bạn thật sự thao tác." />
+      {(lessonDue.length > 0 || due > 0) && (
+        <a href="#/review" className="mb-4 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 hover:bg-rose-100">
+          <span className="text-2xl">📅</span>
+          <div className="flex-1">
+            <div className="font-semibold text-rose-800">Hôm nay cần ôn: {lessonDue.length} bài học · {due} cụm từ</div>
+            <div className="text-sm text-rose-700">Ôn trước, học mới sau – đây là cách để không quên.</div>
+          </div>
+          <span className="btn-primary">Ôn ngay →</span>
+        </a>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="card md:col-span-1">
@@ -132,7 +145,7 @@ export default function Dashboard() {
       </div>
 
       <div className="card mt-4">
-        <div className="label mb-2">Hoạt động gần đây</div>
+        <div className="mb-2 flex items-center justify-between"><div className="label">Hoạt động gần đây</div><a href="#/history" className="text-sm text-indigo-600 hover:underline">Xem toàn bộ lịch sử →</a></div>
         {s.history.length === 0 ? (
           <div className="text-sm text-slate-500">Chưa có hoạt động. Bắt đầu với <a className="text-indigo-600 underline" href="#/recall">Module 1</a> nhé!</div>
         ) : (
@@ -140,7 +153,7 @@ export default function Dashboard() {
             {s.history.slice(0, 8).map((h, i) => (
               <div key={i} className="flex gap-3">
                 <span className="w-28 shrink-0 text-slate-400">{new Date(h.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
-                <span>{{ recall: '🗣️', listening: '🎧', roleplay: '⏱️', writing: '✍️' }[h.module]} {h.detail}</span>
+                <span>{{ recall: '🗣️', listening: '🎧', roleplay: '⏱️', writing: '✍️', translate: '✍️' }[h.module]} {h.detail}</span>
               </div>
             ))}
           </div>

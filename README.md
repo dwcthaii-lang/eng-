@@ -1,5 +1,7 @@
 # 🎙️ English Reflex – Luyện Nghe & Nói phản xạ
 
+👉 **Học ngay online:** https://dwcthaii-lang.github.io/eng-/ (Chrome/Edge, cho phép micro)
+
 ## Chạy app (chỉ 2 bước)
 
 **Bước 1 – Chỉ làm một lần:** cài **Node.js** bản LTS tại https://nodejs.org (bấm Next đến hết).
@@ -24,6 +26,12 @@ Micro trên điện thoại chỉ hoạt động qua link **https**. Cách miễ
 3. Mở link bằng Chrome trên điện thoại → Menu ⋮ → **Thêm vào màn hình chính**.
 
 Dữ liệu trên điện thoại và máy tính là riêng. Muốn chuyển: **Cài đặt → Xuất file sao lưu** ở máy này, **Nhập file sao lưu** ở máy kia.
+
+## Ôn tập (lặp lại ngắt quãng)
+Mỗi bài đã học (thẻ nói, bài nghe, nhập vai, đoạn dịch) và mỗi cụm từ đều có lịch ôn riêng: 1 → 3 → 7 → 15 → 30+ ngày; nhớ tốt thì giãn ra, quên thì ôn sớm. Mở **📅 Ôn tập hôm nay** mỗi ngày trước khi học bài mới. Bật nhắc ở **Cài đặt → Nhắc ôn hằng ngày** (thông báo trình duyệt + file lịch .ics cho Google Calendar).
+
+## Thêm bài mới không giới hạn
+**Thư viện bài học → ✨ Tạo bằng AI** (cần API key Gemini miễn phí trong Cài đặt): AI soạn tình huống mới đủ cho cả 3 module theo chủ đề bạn muốn. Có thể xuất/nhập gói bài học .json.
 
 ## Sao lưu dữ liệu
 Mọi tiến độ lưu trong trình duyệt. Mỗi tuần vào **Cài đặt → ⬇ Xuất file sao lưu** (file .json). Khi đổi máy/trình duyệt: **⬆ Nhập file sao lưu**.

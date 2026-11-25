@@ -4,30 +4,35 @@
 // 3) Dịch ngược: đọc câu mẫu → che đi → nhìn tiếng Việt và viết lại tiếng Anh
 import { useMemo, useState } from 'react'
 import { readings } from '../data/readings'
-import { allRecallPrompts } from '../data'
+import { getRecallPrompts } from '../data'
+import Translate from './Translate'
 import { useStore, update, logHistory } from '../lib/store'
 import { addReactivate, isDue, vocabId } from '../lib/srs'
 import { chunkUsed, similarity, normalize } from '../lib/text'
 import { speak } from '../lib/speech'
 import { aiEnabled, gradeWriting } from '../lib/ai'
+import { checkGrammar, applyFixes } from '../lib/grammar'
 import { today } from '../lib/date'
 import { useMic, MicButton, LiveTranscript } from '../components/Mic'
 import { PageHeader, SessionTimer, TierChip } from '../components/ui'
 
 const TABS = [
+  ['translate', '🇻🇳→🇬🇧 Dịch đoạn văn'],
   ['read', '📖 Đọc chủ động'],
   ['journal', '📝 Nhật ký 3–5 câu'],
   ['back', '🔄 Dịch ngược'],
 ]
 
-export default function Writing() {
-  const [tab, setTab] = useState('read')
+export default function Writing({ tab: routeTab, id }) {
+  const tab = TABS.some(([k]) => k === routeTab) ? routeTab : 'translate'
+  const setTab = (k) => (window.location.hash = `#/writing/${k}`)
   return (
     <div>
       <PageHeader title="✍️ Đọc & Viết phục vụ Nói" subtitle="15 phút/ngày. Đọc để lấy “nguyên liệu” (cụm từ), viết để sắp xếp câu chậm – rồi đọc to để chuyển sang phản xạ nói." right={<SessionTimer targetMin={15} />} />
       <div className="mb-4 flex gap-2">
         {TABS.map(([k, l]) => <button key={k} onClick={() => setTab(k)} className={tab === k ? 'btn-primary' : 'btn-ghost'}>{l}</button>)}
       </div>
+      {tab === 'translate' && <Translate id={id} />}
       {tab === 'read' && <ActiveReading />}
       {tab === 'journal' && <Journal />}
       {tab === 'back' && <BackTranslation />}
@@ -85,6 +90,8 @@ function Journal() {
   const [text, setText] = useState('')
   const [fb, setFb] = useState(null)
   const [readAloud, setReadAloud] = useState(null)
+  const [gram, setGram] = useState(null)
+  const grammarOn = useStore((s) => s.settings.grammarCheck)
   const mic = useMic({ onFinal: (t) => setReadAloud({ said: t, sim: Math.round(similarity(t, text) * 100) }) })
 
   const promptEn = prompt === 'lab' ? 'Write a 3-5 sentence lab log: what you did today, one problem, and your next step.' : 'Write 3-5 sentences about something that happened in your dorm or daily life in Taiwan today.'
@@ -95,6 +102,10 @@ function Journal() {
     update((s) => { s.writing.unshift(entry); s.writing = s.writing.slice(0, 100) })
     logHistory('writing', `Nhật ký ${normalize(text).length} từ`)
     setFb({ saved: true })
+    if (grammarOn) {
+      setGram({ loading: true })
+      checkGrammar(text).then((m) => setGram({ matches: m })).catch((e) => setGram({ error: String(e.message || e) }))
+    }
     if (aiEnabled()) {
       try {
         setFb({ saved: true, loading: true })
@@ -134,6 +145,17 @@ function Journal() {
           </div>
         )}
         {fb?.saved && !fb.loading && !fb.corrected && !fb.error && <div className="text-sm text-emerald-600">✓ Đã lưu.</div>}
+        {gram?.loading && <div className="text-sm text-slate-500">Đang kiểm tra ngữ pháp…</div>}
+        {gram?.error && <div className="text-sm text-rose-600">Không kiểm tra được ngữ pháp: {gram.error}</div>}
+        {gram?.matches && (
+          <div className="rounded-xl bg-slate-50 p-3 text-sm space-y-1">
+            <b>Ngữ pháp & chính tả (LanguageTool):</b>
+            {gram.matches.length === 0 ? <div className="text-emerald-700">✓ Không phát hiện lỗi.</div> : gram.matches.map((m, i) => (
+              <div key={i}>• <s className="text-rose-600">{m.wrong}</s> → <b className="text-emerald-700">{m.replacements.join(' / ') || '?'}</b> <span className="text-slate-500">– {m.message}</span></div>
+            ))}
+            {gram.matches.length > 0 && <div className="pt-1"><span className="text-slate-500">Bản đã sửa: </span>{applyFixes(text, gram.matches)}</div>}
+          </div>
+        )}
       </div>
       {fb?.saved && (
         <div className="card flex flex-col items-center gap-3">
@@ -156,6 +178,7 @@ function Journal() {
 }
 
 function BackTranslation() {
+  const allRecallPrompts = useMemo(() => getRecallPrompts(), [])
   const [i, setI] = useState(() => Math.floor(Math.random() * allRecallPrompts.length))
   const p = allRecallPrompts[i]
   const [phase, setPhase] = useState('read') // read -> write -> check

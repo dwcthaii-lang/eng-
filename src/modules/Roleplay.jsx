@@ -1,6 +1,8 @@
 // MODULE 3: Nhập vai phản xạ có áp lực thời gian (Timed Roleplay Simulator)
+import { today } from '../lib/date'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { situations, findSituation, TIERS } from '../data'
+import { useSituations, findSituation, TIERS } from '../data'
+import { scheduleReview, nextDueLabel } from '../lib/review'
 import { getState, update, useStore, logHistory } from '../lib/store'
 import { speak, stopSpeaking } from '../lib/speech'
 import { chunkUsed, similarity } from '../lib/text'
@@ -20,9 +22,12 @@ export default function Roleplay({ id }) {
 
 function RoleplayList() {
   const progress = useStore((s) => s.roleplay)
+  const reviews = useStore((s) => s.reviews)
+  const situations = useSituations()
+  const t = today()
   return (
     <div>
-      <PageHeader title="⏱️ Nhập vai phản xạ" subtitle="AI nói xong → đồng hồ đếm ngược buộc bạn BẮT ĐẦU nói. Bí từ thì bấm Gợi ý (chỉ 2–3 từ khoá)." />
+      <PageHeader title="⏱️ Nhập vai phản xạ" subtitle="AI nói xong → đồng hồ đếm ngược buộc bạn BẮT ĐẦU nói. Bí từ thì bấm Gợi ý (chỉ 2–3 từ khoá)." right={<a className="btn-ghost" href="#/library">✨ Thêm tình huống</a>} />
       {[1, 2].map((tier) => (
         <div key={tier} className="mb-8">
           <div className="label mb-3">{TIERS[tier].label}</div>
@@ -34,7 +39,7 @@ function RoleplayList() {
                   <div className="font-semibold">{s.titleVi}</div>
                   <div className="text-xs text-slate-500">Vai AI: {s.roleplay.roleVi} ({s.roleplay.aiName})</div>
                 </div>
-                {progress[s.id]?.count > 0 && <span className="chip bg-emerald-100 text-emerald-700">×{progress[s.id].count}</span>}
+                {reviews[`roleplay:${s.id}`]?.due <= t ? <span className="chip bg-rose-100 text-rose-700">📅 Cần ôn</span> : progress[s.id]?.count > 0 && <span className="chip bg-emerald-100 text-emerald-700">✓ {nextDueLabel(reviews[`roleplay:${s.id}`])}</span>}
               </a>
             ))}
           </div>
@@ -209,6 +214,11 @@ function Session({ sit, mode, onExit }) {
       p.lastAt = Date.now()
     })
     logHistory('roleplay', `${sit.titleVi} · ${stats.turns} lượt, ${stats.late} lần chậm`)
+    // Lịch ôn nhập vai: trừ điểm khi chậm phản xạ / phải xem gợi ý
+    if (mine.length) {
+      const grade = 5 - (stats.late / mine.length) * 2.5 - (stats.hints / mine.length) * 2.5
+      scheduleReview('roleplay', sit.id, Math.max(1, grade), `${sit.emoji} ${sit.titleVi}`)
+    }
     if (aiEnabled() && mine.length) {
       try {
         setFeedback((f) => ({ ...f, loading: true }))

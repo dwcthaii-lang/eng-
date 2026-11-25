@@ -112,3 +112,58 @@ export async function testConnection() {
   const r = await askJson('Return JSON only.', 'Return {"ok": true}')
   return !!r.ok
 }
+
+// Mở rộng cụm từ: đồng nghĩa, trái nghĩa, liên quan, ví dụ văn nói
+export function enrichChunk({ en, vi }) {
+  return askJson(
+    `You are an English vocabulary coach focusing on natural spoken English. ${LEARNER} Return JSON only.`,
+    `Chunk: "${en}" (Vietnamese: ${vi || '?'})
+Return JSON: {"syn": ["1-3 synonyms or near-synonym chunks"], "ant": ["0-2 opposites, empty if none"], "rel": ["2-3 related collocations/word family"], "ex": ["2 short natural sentences a student would SAY in daily life or in a lab, using the chunk"]}`
+  )
+}
+
+// Chấm bản dịch Việt -> Anh: sửa ngữ pháp + từ vựng
+export function gradeTranslation({ vi, reference, text }) {
+  return askJson(
+    `You are an English writing coach. ${LEARNER} Return JSON only.`,
+    `Vietnamese source:\n${vi}\n\nReference translation (one possible answer):\n${reference}\n\nLearner's translation:\n${text}
+
+Evaluate meaning accuracy, grammar and natural word choice. Keep the learner's structure where it is correct. Return JSON:
+{"score": 0-10, "corrected": "the learner's text with minimal corrections", "grammar": [{"from":"...","to":"...","why_vi":"..."}] (max 4), "vocab": [{"from":"...","to":"more natural word/chunk","why_vi":"..."}] (max 4), "missing_vi": "ideas from the source the learner left out, in Vietnamese, or empty", "feedback_vi": "1-2 sentences in Vietnamese"}`
+  )
+}
+
+// Tra nhanh khi viết: tiếng Việt -> cách nói tiếng Anh tự nhiên
+export function lookupPhrase({ phrase, context }) {
+  return askJson(
+    `You are a bilingual Vietnamese-English dictionary for spoken and academic English. Return JSON only.`,
+    `Vietnamese word/phrase: "${phrase}"\nContext sentence: "${context || ''}"\nReturn JSON: {"options": [{"en": "natural English word/chunk", "note_vi": "khi nào dùng, ngắn gọn"}] (2-3 options), "example": "one example sentence in English"}`
+  )
+}
+
+// Sinh tình huống mới đầy đủ cho cả 3 module (không giới hạn nội dung)
+export function generateSituation({ tier, topicVi }) {
+  return askJson(
+    `You create English speaking & listening lessons. ${LEARNER} Return JSON only, exactly following the schema.`,
+    `Create ONE new lesson situation. Tier ${tier} (${tier === 1 ? 'international dorm & daily life in Taiwan' : 'semiconductor lab, cleanroom, advisor meetings, academic presentations'}).
+Topic idea from learner (Vietnamese, may be empty): "${topicVi || ''}"
+
+Schema:
+{
+ "emoji": "one emoji", "title": "short English title", "titleVi": "short Vietnamese title",
+ "recall": [ 2 items: {"vi": "Vietnamese instruction describing what to say", "context": "Vietnamese context", "chunks": [3 x {"en": "natural chunk/collocation", "vi": "nghĩa"}], "model": "natural spoken model answer using all 3 chunks"} ],
+ "listening": {
+   "speakers": {"A": "Name (role)", "B": "Minh"},
+   "gistVi": "1-sentence Vietnamese summary", "keyPoints": ["3 Vietnamese key points"],
+   "chunks": [3 x {"en":"...","vi":"..."}],
+   "lines": [5-7 x {"s": "A" or "B", "t": "line text"}]
+ },
+ "roleplay": {"aiName": "...", "aiRoleEn": "who the AI plays", "roleVi": "vai (tiếng Việt)", "setupEn": "scenario", "goalVi": "mục tiêu", "turns": [4 x {"ai": "AI line ending with something to respond to", "hint": ["2-3 keywords"], "model": "natural learner reply"}]}
+}
+Listening line markup rules (IMPORTANT):
+- Put 4-6 connected-speech gaps across the lines using [[spoken form|accepted alternatives comma separated|Vietnamese explanation of the linking/reduction]], e.g. [[gonna|going to|going to → gonna: 'to' giảm thành /ə/]] or [[did you|didja|did you → /ˈdɪdʒə/: /d/ + /j/ thành /dʒ/]].
+- The spoken form must be pronounceable by text-to-speech.
+- Mark sentence stress by wrapping stressed content words in *asterisks*.
+Natural, real-life language, 30-60 seconds of audio.`
+  )
+}

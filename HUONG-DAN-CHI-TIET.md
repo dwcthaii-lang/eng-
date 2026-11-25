@@ -58,7 +58,16 @@ Mẹo: học cùng một tình huống xuyên suốt cả 3 module (VD: “Máy 
 
 **Module 4 – Tổng quan & SRS:** Đếm thời gian học thực tế (chỉ tính khi tab đang mở và bạn có thao tác trong 90 giây gần nhất). Từ vựng đi qua 4 trạng thái: **Mới → Đã hiểu khi nghe → Đã bật ra khi nói → Thành thạo**. “Thành thạo” = tự nói đúng cụm từ trong ngữ cảnh, *không xem gợi ý*, ở **3 ngày khác nhau** (lịch ôn 1 → 2 → 4 ngày).
 
+**📅 Ôn tập hôm nay:** gom mọi bài đến hạn theo lịch lặp lại ngắt quãng kiểu SM-2 (1 → 3 → 7 → 15 → 30+ ngày, điều chỉnh theo điểm của bạn). Mỗi ngày giới hạn số thẻ mới (mặc định 6, đổi trong Cài đặt) để luôn còn thời gian ôn. Nhắc ôn: thông báo trình duyệt vào giờ bạn chọn + file lịch .ics.
+
+**📚 Học theo cụm:** mỗi cụm từ có đồng nghĩa, trái nghĩa, từ liên quan và 2 ví dụ văn nói tự nhiên (sẵn cho 120 cụm chính; cụm khác bấm “Mở rộng bằng AI”). Xem sau mỗi thẻ nói hoặc bấm vào dòng trong Kho từ vựng.
+
+**🗃️ Thư viện bài học:** xem trạng thái/lịch ôn của mọi tình huống, tạo tình huống mới bằng AI không giới hạn, nhập/xuất gói bài học.
+
+**🗂️ Lịch sử học:** lưu tới 3000 hoạt động gần nhất, nhóm theo ngày, kèm số phút học.
+
 **Đọc & Viết (15′):**
+- *Dịch đoạn văn Việt→Anh:* 20 đoạn theo các tình huống; gợi ý từ từng cái một, ô tra nhanh tiếng Việt→Anh (AI nếu có key), sửa ngữ pháp/chính tả miễn phí bằng LanguageTool, AI gợi ý từ vựng tự nhiên hơn; có lịch ôn.
 - *Đọc chủ động:* thông báo KTX và abstract bài báo bán dẫn ngắn; bấm cụm từ vàng để đưa vào kho luyện nói; trả lời 2 câu hỏi thành tiếng.
 - *Nhật ký 3–5 câu:* viết nhật ký lab/đời sống bằng cụm từ đang học → (AI sửa nếu có key) → đọc to lại bằng mic. Nhật ký lab chính là bản nháp báo cáo tuần cho giáo sư.
 - *Dịch ngược:* đọc câu mẫu → che đi → nhìn tình huống tiếng Việt viết lại tiếng Anh.

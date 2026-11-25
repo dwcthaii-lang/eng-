@@ -5,12 +5,15 @@ import { STAGES, isDue, MASTERY_DAYS, vocabId } from '../lib/srs'
 import { speak } from '../lib/speech'
 import { today } from '../lib/date'
 import { PageHeader, StageChip } from '../components/ui'
+import { ChunkCluster } from '../components/ChunkCluster'
+import { Fragment } from 'react'
 
 export default function Vocabulary() {
   const vocab = useStore((s) => s.vocab)
   const [filter, setFilter] = useState('all')
   const [q, setQ] = useState('')
   const [form, setForm] = useState({ en: '', vi: '', example: '' })
+  const [open, setOpen] = useState(null)
 
   const list = useMemo(() => {
     let l = Object.values(vocab)
@@ -57,23 +60,31 @@ export default function Vocabulary() {
           </thead>
           <tbody>
             {list.map((v) => (
-              <tr key={v.id} className="border-t border-slate-100">
+              <Fragment key={v.id}>
+              <tr className="border-t border-slate-100 cursor-pointer hover:bg-slate-50" onClick={() => setOpen(open === v.id ? null : v.id)}>
                 <td className="p-3 font-medium">
-                  <button className="mr-1 text-slate-400 hover:text-indigo-600" onClick={() => speak(v.example || v.en)} title={v.example}>🔈</button>
+                  <button className="mr-1 text-slate-400 hover:text-indigo-600" onClick={(e) => { e.stopPropagation(); speak(v.example || v.en) }} title={v.example}>🔈</button>
                   {v.en} {v.reactivate && <span className="chip bg-rose-100 text-rose-700 ml-1">kích hoạt lại</span>}
                 </td>
                 <td className="p-3 text-slate-600">{v.vi}</td>
                 <td className="p-3"><StageChip stage={v.stage} /></td>
                 <td className="p-3">{v.unaidedDays.length}/{MASTERY_DAYS}</td>
                 <td className="p-3 text-slate-500 hidden sm:table-cell">{v.stage === 'mastered' ? '—' : v.nextReview ? (v.nextReview <= today() ? 'Hôm nay' : v.nextReview.slice(5)) : 'Chưa học'}</td>
-                <td className="p-3 text-right">{v.sources.includes('custom') && <button className="text-slate-400 hover:text-rose-600" onClick={() => remove(v.id)}>✕</button>}</td>
+                <td className="p-3 text-right">{v.sources.includes('custom') && <button className="text-slate-400 hover:text-rose-600" onClick={(e) => { e.stopPropagation(); remove(v.id) }}>✕</button>}</td>
               </tr>
+              {open === v.id && (
+                <tr><td colSpan={6} className="bg-slate-50 p-3">
+                  <ChunkCluster en={v.en} vi={v.vi} />
+                  {v.example && <div className="mt-2 text-sm text-slate-600">Ngữ cảnh trong bài: “{v.example}”</div>}
+                </td></tr>
+              )}
+              </Fragment>
             ))}
             {list.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-slate-500">Không có cụm từ nào.</td></tr>}
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-xs text-slate-500">Cụm từ bạn tự thêm sẽ vào danh sách “Cần kích hoạt lại” để luyện nói ngay ở Module 1.</p>
+      <p className="mt-3 text-xs text-slate-500">Bấm vào một dòng để xem cả “chùm”: đồng nghĩa, trái nghĩa, từ liên quan và ví dụ văn nói. Cụm từ bạn tự thêm sẽ vào danh sách “Cần kích hoạt lại” để luyện nói ngay ở Module 1.</p>
     </div>
   )
 }

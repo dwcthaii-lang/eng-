@@ -1,6 +1,8 @@
 // MODULE 1: Từ vựng kích hoạt chủ động (Active Recall & Chunking)
 import { useCallback, useMemo, useState } from 'react'
-import { allRecallPrompts, TIERS } from '../data'
+import { getRecallPrompts, TIERS } from '../data'
+import { scheduleReview, isLessonDue, newStartedToday } from '../lib/review'
+import { ChunkCluster } from '../components/ChunkCluster'
 import { getState, update, useStore, logHistory } from '../lib/store'
 import { isDue, recordSpoken, markHeard, vocabId } from '../lib/srs'
 import { localScore, chunkUsed } from '../lib/text'
@@ -20,10 +22,13 @@ function buildQueue({ tier, mode, size }) {
       .slice(0, size)
       .map((v) => ({ type: 'word', id: 'w-' + v.id, word: v }))
   }
-  const prompts = allRecallPrompts.filter((p) => tier === 'all' || String(p.tier) === String(tier))
+  const prompts = getRecallPrompts(s).filter((p) => tier === 'all' || String(p.tier) === String(tier))
   const seen = (p) => (s.recall[p.id]?.attempts || 0) > 0
-  const due = prompts.filter((p) => seen(p) && p.chunks.some((c) => { const v = s.vocab[vocabId(c.en)]; return v && isDue(v, t) }))
-  const fresh = prompts.filter((p) => !seen(p))
+  // Đến hạn ôn: theo lịch của thẻ HOẶC có cụm từ đến hạn
+  const due = prompts.filter((p) => seen(p) && (isLessonDue('recall', p.id, s) || p.chunks.some((c) => { const v = s.vocab[vocabId(c.en)]; return v && isDue(v, t) })))
+  // Giới hạn thẻ MỚI mỗi ngày để không học dồn mà quên ôn
+  const newLeft = mode === 'review' ? 0 : Math.max(0, s.settings.newRecallPerDay - newStartedToday('recall', s))
+  const fresh = prompts.filter((p) => !seen(p)).slice(0, newLeft)
   // Ưu tiên ôn bài đến hạn, sau đó thêm tình huống mới (Tầng 1 trước)
   fresh.sort((a, b) => a.tier - b.tier)
   const reactivateWords = Object.values(s.vocab).filter((v) => v.reactivate && v.stage !== 'mastered').slice(0, 2)
@@ -32,8 +37,8 @@ function buildQueue({ tier, mode, size }) {
     ...reactivateWords.map((v) => ({ type: 'word', id: 'w-' + v.id, word: v })),
     ...fresh.map((p) => ({ type: 'prompt', id: p.id, prompt: p, review: false })),
   ]
-  // nếu đã học hết mà không có gì đến hạn: luyện lại tình huống điểm thấp
-  if (!q.length) {
+  // nếu không có gì đến hạn và hết lượt học mới: luyện thêm tình huống điểm thấp (không bắt buộc)
+  if (!q.length && mode !== 'review') {
     prompts
       .slice()
       .sort((a, b) => (s.recall[a.id]?.lastScore ?? 0) - (s.recall[b.id]?.lastScore ?? 0))
@@ -50,7 +55,7 @@ export default function Recall({ mode: routeMode }) {
   const settings = useStore((s) => s.settings)
   const reactivateCount = useStore((s) => Object.values(s.vocab).filter((v) => v.reactivate && v.stage !== 'mastered').length)
   const [tier, setTier] = useState('all')
-  const [queue, setQueue] = useState(null)
+  const [queue, setQueue] = useState(() => (routeMode === 'review' ? buildQueue({ tier: 'all', mode: 'review', size: 50 }) : null))
   const [idx, setIdx] = useState(0)
   const [results, setResults] = useState([])
 
@@ -75,13 +80,27 @@ export default function Recall({ mode: routeMode }) {
           </div>
           <div className="flex flex-wrap gap-3">
             <button className="btn-primary text-base px-6 py-3" onClick={() => start('session')}>▶ Bắt đầu phiên 20 phút</button>
+            <button className="btn-ghost text-base px-6 py-3" onClick={() => start('review')}>📅 Chỉ ôn thẻ đến hạn</button>
             <button className="btn-ghost text-base px-6 py-3" disabled={!reactivateCount} onClick={() => start('reactivate')}>
               🔁 Từ cần kích hoạt lại ({reactivateCount})
             </button>
           </div>
           <p className="text-sm text-slate-500">
-            Cách tính: lần đầu gặp tình huống bạn được xem gợi ý cụm từ. Ở các lần ôn sau, gợi ý bị ẩn – tự nói đúng mà không bấm gợi ý ở 3 ngày khác nhau thì cụm từ được tính là <b>Thành thạo</b>.
+            Mỗi phiên: thẻ đến hạn ôn được xếp trước, sau đó tối đa {settings.newRecallPerDay} thẻ mới/ngày (đổi trong Cài đặt). Lần đầu gặp tình huống bạn được xem gợi ý cụm từ. Ở các lần ôn sau, gợi ý bị ẩn – tự nói đúng mà không bấm gợi ý ở 3 ngày khác nhau thì cụm từ được tính là <b>Thành thạo</b>.
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (queue.length === 0) {
+    return (
+      <div>
+        <PageHeader title="🗣️ Từ vựng kích hoạt chủ động" />
+        <div className="card space-y-3">
+          <div className="text-lg font-semibold">✅ Không còn thẻ nào đến hạn ôn.</div>
+          <p className="text-sm text-slate-500">Bạn đã ôn xong hoặc đã học đủ số thẻ mới hôm nay. Hãy chuyển sang bài nghe hay nhập vai.</p>
+          <div className="flex gap-2"><button className="btn-ghost" onClick={() => setQueue(null)}>← Quay lại</button><a className="btn-primary" href="#/review">Xem mục Ôn tập</a></div>
         </div>
       </div>
     )
@@ -157,6 +176,10 @@ function RecallCard({ item, settings, onDone }) {
             r.bestScore = Math.max(r.bestScore || 0, local.score)
             r.lastAt = Date.now()
           })
+          // Lịch ôn của thẻ: điểm 0–10 -> mức 0–5; ôn mà phải xem gợi ý thì tối đa mức 3
+          let grade = Math.round(local.score / 2)
+          if (item.review && hintShown) grade = Math.min(grade, 3)
+          scheduleReview('recall', p.id, grade, `${p.emoji} ${p.titleVi}`)
         }
       }
       if (aiEnabled() && !isWord) {
@@ -263,6 +286,12 @@ function RecallCard({ item, settings, onDone }) {
             <button className="btn-ghost" onClick={playModel}>🔊 Nghe câu mẫu <span className="kbd">R</span></button>
             <button className="btn-primary" onClick={next}>Tiếp theo <span className="kbd !bg-indigo-500 !text-white !border-indigo-400">Enter</span></button>
           </div>
+          <details className="rounded-xl bg-slate-50 p-3" open={!item.review}>
+            <summary className="cursor-pointer text-sm font-semibold">📚 Học theo cụm: đồng nghĩa · trái nghĩa · ví dụ văn nói</summary>
+            <div className="mt-3 grid gap-2">
+              {(isWord ? [{ en: item.word.en, vi: item.word.vi }] : p.chunks).map((c) => <ChunkCluster key={c.en} en={c.en} vi={c.vi} compact />)}
+            </div>
+          </details>
           <p className="text-xs text-slate-400">Mẹo: nghe câu mẫu rồi nhại lại 1–2 lần (giữ Space) trước khi qua thẻ mới. Chỉ lần nói đầu tiên được tính vào SRS.</p>
         </div>
       )}

@@ -21,6 +21,33 @@ export default function Settings() {
   const fileRef = useRef()
   const set = (patch) => update((d) => Object.assign(d.settings, patch))
 
+  const [notif, setNotif] = useState(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission)
+  const enableReminder = async (on) => {
+    if (on && typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+      const p = await Notification.requestPermission()
+      setNotif(p)
+    }
+    set({ reminderOn: on })
+  }
+  // File lịch (.ics) nhắc ôn mỗi ngày – thêm vào Google Calendar / điện thoại
+  const downloadIcs = () => {
+    const [h, m] = s.reminderTime.split(':')
+    const d = new Date()
+    const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+    const url = window.location.origin + window.location.pathname + '#/review'
+    const ics = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//English Reflex//VI', 'BEGIN:VEVENT',
+      `UID:english-reflex-daily-${ymd}`, `DTSTAMP:${ymd}T000000`, `DTSTART:${ymd}T${h}${m}00`, 'DURATION:PT30M', 'RRULE:FREQ=DAILY',
+      'SUMMARY:📅 Ôn tập English Reflex', `DESCRIPTION:Mở ${url} để ôn các bài đến hạn hôm nay.`, `URL:${url}`,
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Đến giờ ôn tiếng Anh', 'TRIGGER:PT0M', 'END:VALARM',
+      'END:VEVENT', 'END:VCALENDAR',
+    ].join('\r\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }))
+    a.download = 'english-reflex-nhac-on.ics'
+    a.click()
+  }
+
   const runTest = async () => {
     setTest('Đang kiểm tra…')
     try {
@@ -118,6 +145,18 @@ export default function Settings() {
       </div>
 
       <div className="card space-y-4">
+        <div className="label">📅 Nhắc ôn hằng ngày</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={s.reminderOn} onChange={(e) => enableReminder(e.target.checked)} /> Thông báo trên trình duyệt lúc</label>
+          <input type="time" className="input !w-32" value={s.reminderTime} onChange={(e) => set({ reminderTime: e.target.value })} />
+          {notif === 'denied' && <span className="text-xs text-rose-600">Trình duyệt đang chặn thông báo – bật lại trong cài đặt trang web.</span>}
+          {notif === 'unsupported' && <span className="text-xs text-rose-600">Trình duyệt này không hỗ trợ thông báo.</span>}
+        </div>
+        <p className="text-xs text-slate-500">Thông báo hiện khi web/app đang mở (kể cả ở tab nền). Để chắc chắn được nhắc mỗi ngày kể cả khi không mở web, hãy thêm lịch nhắc vào Google Calendar / lịch điện thoại:</p>
+        <button className="btn-ghost" onClick={downloadIcs}>⬇ Tải lịch nhắc hằng ngày (.ics)</button>
+      </div>
+
+      <div className="card space-y-4">
         <div className="label">Luyện tập</div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label={`Đếm ngược phản xạ: ${s.countdownSec} giây`} hint="Khuyến nghị bắt đầu 8s, giảm dần xuống 5s">
@@ -129,7 +168,14 @@ export default function Settings() {
           <Field label={`Số thẻ mỗi phiên Module 1: ${s.recallSessionSize}`}>
             <input type="range" min="5" max="20" step="1" value={s.recallSessionSize} onChange={(e) => set({ recallSessionSize: Number(e.target.value) })} className="w-full" />
           </Field>
+          <Field label={`Thẻ nói MỚI tối đa/ngày: ${s.newRecallPerDay}`} hint="Giới hạn học mới để luôn còn sức ôn bài cũ">
+            <input type="range" min="2" max="20" step="1" value={s.newRecallPerDay} onChange={(e) => set({ newRecallPerDay: Number(e.target.value) })} className="w-full" />
+          </Field>
         </div>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={s.grammarCheck} onChange={(e) => set({ grammarCheck: e.target.checked })} />
+          <span>Sửa ngữ pháp & chính tả bằng <b>LanguageTool</b> (miễn phí, không cần key) ở phần Viết/Dịch. <span className="text-slate-500">Bài viết được gửi tới api.languagetool.org để kiểm tra.</span></span>
+        </label>
       </div>
 
       <div className="card space-y-3">

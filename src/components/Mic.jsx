@@ -74,7 +74,7 @@ export function TypeFallback({ onSubmit, placeholder = 'Hoặc gõ câu trả l�
     <form
       onSubmit={(e) => {
         e.preventDefault()
-        if (v.trim()) { onSubmit(v.trim()); setV('') }
+        if (v.trim()) { onSubmit(v.trim()); setV(''); e.target.querySelector('input')?.blur() }
       }}
     >
       <input className="input" value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder} />

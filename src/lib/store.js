@@ -15,6 +15,11 @@ export const defaultSettings = {
   countdownSec: 6, // 5–8 giây ép phản xạ
   dailyGoalMin: 90,
   recallSessionSize: 10,
+  newRecallPerDay: 6, // số thẻ nói MỚI tối đa mỗi ngày (ưu tiên ôn bài cũ)
+  newLessonsPerDay: 2, // số bài nghe/nhập vai MỚI gợi ý mỗi ngày
+  reminderOn: false,
+  reminderTime: '20:00',
+  grammarCheck: true, // dùng LanguageTool miễn phí để sửa ngữ pháp
 }
 
 const initial = {
@@ -26,6 +31,11 @@ const initial = {
   time: {}, // 'YYYY-MM-DD' -> { total, recall, listening, roleplay, writing }
   writing: [], // { date, promptId, text, feedback }
   history: [], // nhật ký phiên: { at, module, detail }
+  reviews: {}, // lịch ôn từng bài: 'type:id' -> {...}
+  customSituations: [], // tình huống do AI tạo / bạn nhập
+  translations: {}, // đoạn dịch: id -> { attempts, last }
+  enrich: {}, // vocabId -> dữ liệu mở rộng do AI tạo
+  lastNotified: '',
 }
 
 function load() {
@@ -85,6 +95,6 @@ export function useStore(selector = (s) => s) {
 export function logHistory(module, detail) {
   update((s) => {
     s.history.unshift({ at: Date.now(), module, detail })
-    s.history = s.history.slice(0, 200)
+    s.history = s.history.slice(0, 3000)
   })
 }
