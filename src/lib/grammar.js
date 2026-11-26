@@ -6,6 +6,7 @@ export async function checkGrammar(text) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
+    signal: AbortSignal.timeout?.(8000),
   })
   if (!res.ok) throw new Error(`LanguageTool lỗi ${res.status}`)
   const data = await res.json()

@@ -8,6 +8,7 @@ import { isDue, recordSpoken, markHeard, vocabId } from '../lib/srs'
 import { localScore, chunkUsed } from '../lib/text'
 import { speak } from '../lib/speech'
 import { SentenceReview } from '../components/SentenceReview'
+import { SentenceVi } from '../components/SentenceVi'
 import { useHotkeys } from '../lib/hotkeys'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { PageHeader, SessionTimer, TierChip, Shortcuts, Progress } from '../components/ui'
@@ -272,7 +273,8 @@ function RecallCard({ item, settings, onDone }) {
           {!isWord && (
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <span className="text-slate-500">Câu mẫu: </span>
-              <b>{p.model}</b>
+              <b>{p.model}</b> <button onClick={playModel} className="text-slate-400 hover:text-indigo-600">🔈</button>
+              <SentenceVi en={p.model} vi={p.modelVi} className="mt-1 !text-sm" />
             </div>
           )}
           <div className="flex flex-wrap gap-2 pt-1">

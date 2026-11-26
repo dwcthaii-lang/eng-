@@ -133,7 +133,7 @@ export async function translateText(en) {
   if (tr[key]) return tr[key]
   let out = null
   try {
-    const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(key)}`)
+    const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout?.(8000) })
     const d = await r.json()
     const t = (d?.[0] || []).map((x) => x?.[0] || '').join('').trim()
     if (t) out = { vi: t, by: 'Google' }
@@ -146,7 +146,7 @@ export async function translateText(en) {
   }
   if (!out) {
     try {
-      const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(key)}&langpair=en|vi`)
+      const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(key)}&langpair=en|vi`, { signal: AbortSignal.timeout?.(8000) })
       const d = await r.json()
       const t = d?.responseData?.translatedText
       if (t && t.toLowerCase() !== key.toLowerCase()) out = { vi: t, by: 'MyMemory' }

@@ -14,6 +14,7 @@ import { today, addDays } from '../lib/date'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { PageHeader, Progress, Shortcuts, SessionTimer } from '../components/ui'
 import { SentenceReview } from '../components/SentenceReview'
+import { SentenceVi } from '../components/SentenceVi'
 
 const LEVEL_NAMES = {
   1: ['Cấp 1 · Nền tảng để nói hằng ngày', 'Các thì cơ bản và câu hỏi – đủ dùng cho 80% hội thoại.'],
@@ -395,6 +396,7 @@ function SpeakCard({ step, onDone }) {
           <div className="font-semibold">{ok ? '✅ Đúng cấu trúc!' : '👉 Còn thiếu phần in đỏ – nghe câu mẫu rồi nói lại:'}</div>
           <div className="mt-1 flex flex-wrap gap-1">{step.must.map((m, i) => <span key={m} className={`chip ${hits[i] ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-700'}`}>{hits[i] ? '✓' : '✗'} {m.split('/')[0]}</span>)}</div>
           <div className="mt-2">Câu mẫu: <b>{step.model}</b> <button onClick={() => speak(step.model)}>🔈</button></div>
+          <SentenceVi en={step.model} className="!text-sm" />
           {tries > 1 && <div className="mt-1 text-xs text-slate-500">Lần nói lại chỉ để luyện; điểm tính theo lần đầu.</div>}
         </div>
       )}

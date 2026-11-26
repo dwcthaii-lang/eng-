@@ -47,25 +47,10 @@ export function SentenceReview({ transcript, chunks = [], model = '', situationV
     const run = async () => {
       const used = chunks.filter((c) => chunkUsed(c, transcript))
       const chunkScore = chunks.length ? (used.length / chunks.length) * 10 : 10
-      // 1) AI chấm chi tiết nếu có key
-      if (aiEnabled()) {
-        try {
-          const ai = await reviewSentence({ situationVi, context, chunks, transcript, model })
-          const errors = (ai.errors || []).filter((e) => e && e.wrong).map((e) => {
-            const i = transcript.toLowerCase().indexOf(String(e.wrong).toLowerCase())
-            return { ...e, offset: i, length: i >= 0 ? e.wrong.length : 0, src: 'ai' }
-          })
-          const score = Math.max(0, Math.min(10, Math.round(Number(ai.score) || 0)))
-          if (!alive) return
-          setSt({ loading: false, ai: true, errors, corrected: ai.corrected, natural: ai.natural, avoid: ai.avoid_vi || [], praise: ai.praise_vi, tip: ai.tip_vi, scores: [['Dùng cụm từ', Math.round(chunkScore)], ['Ngữ pháp', ai.scores?.grammar], ['Từ vựng', ai.scores?.vocab], ['Tự nhiên', ai.scores?.natural], ['Đủ ý', ai.scores?.meaning]], score })
-          onScore?.(score)
-          return
-        } catch (e) {
-          if (!alive) return
-          setSt((x) => ({ ...x, aiError: String(e.message || e) }))
-        }
-      }
-      // 2) Không có key: luật + LanguageTool
+      // AI chạy song song; kết quả chấm nhanh (luật + LanguageTool) hiện trước
+      const aiOn = !!aiEnabled()
+      const aiPromise = aiOn ? reviewSentence({ situationVi, context, chunks, transcript, model }).then((r) => ({ r }), (e) => ({ e })) : null
+      // Chấm nhanh: luật lỗi người Việt + LanguageTool
       let errors = localErrors(transcript)
       let ltFailed = false
       if (grammarOn) {
@@ -87,7 +72,7 @@ export function SentenceReview({ transcript, chunks = [], model = '', situationV
       const short = normalize(transcript).length < 5 ? 2 : 0
       const score = Math.max(0, Math.round(chunkScore * 0.45 + grammarScore * 0.4 + Math.max(0, naturalScore) * 0.15 - short))
       if (!alive) return
-      setSt((x) => ({ ...x, loading: false, ai: false, errors, corrected: errors.length ? corrected : '', ltFailed: grammarOn && ltFailed, ltOff: !grammarOn, scores: [['Dùng cụm từ', Math.round(chunkScore)], ['Ngữ pháp', Math.round(grammarScore)], ['Giống câu mẫu', Math.max(0, naturalScore)]], score }))
+      setSt((x) => ({ ...x, loading: false, ai: false, aiPending: aiOn, errors, corrected: errors.length ? corrected : '', ltFailed: grammarOn && ltFailed, ltOff: !grammarOn, scores: [['Dùng cụm từ', Math.round(chunkScore)], ['Ngữ pháp', Math.round(grammarScore)], ['Giống câu mẫu', Math.max(0, naturalScore)]], score }))
       onScore?.(score)
       // dịch giải thích của LanguageTool sang tiếng Việt
       errors.forEach((e, i) => {
@@ -96,17 +81,31 @@ export function SentenceReview({ transcript, chunks = [], model = '', situationV
           if (r && alive) setSt((x) => ({ ...x, errors: x.errors.map((y, j) => (j === i ? { ...y, whyVi: r.vi } : y)) }))
         })
       })
+      if (aiPromise) {
+        const out = await aiPromise
+        if (!alive) return
+        if (out.e) { setSt((x) => ({ ...x, aiPending: false, aiError: String(out.e.message || out.e) })); return }
+        const ai = out.r
+        const aiErrors = (ai.errors || []).filter((e) => e && e.wrong).map((e) => {
+          const i = transcript.toLowerCase().indexOf(String(e.wrong).toLowerCase())
+          return { ...e, offset: i, length: i >= 0 ? e.wrong.length : 0, src: 'ai' }
+        })
+        const aiScore = Math.max(0, Math.min(10, Math.round(Number(ai.score) || 0)))
+        setSt({ loading: false, ai: true, errors: aiErrors, corrected: ai.corrected, natural: ai.natural, avoid: ai.avoid_vi || [], praise: ai.praise_vi, tip: ai.tip_vi, scores: [['Dùng cụm từ', Math.round(chunkScore)], ['Ngữ pháp', ai.scores?.grammar], ['Từ vựng', ai.scores?.vocab], ['Tự nhiên', ai.scores?.natural], ['Đủ ý', ai.scores?.meaning]], score: aiScore })
+        onScore?.(aiScore)
+        return
+      }
     }
     run()
     return () => { alive = false }
   }, [transcript])
 
-  if (st.loading) return <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">🔎 Đang chấm cả câu{aiEnabled() ? ' bằng AI' : ''}…</div>
+  if (st.loading) return <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">🔎 Đang chấm cả câu…</div>
 
   return (
     <div className="space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-semibold">📝 Chấm cả câu {st.ai ? <span className="chip bg-indigo-100 text-indigo-700">AI</span> : <span className="chip bg-slate-100 text-slate-600">tự động</span>}</div>
+        <div className="font-semibold">📝 Chấm cả câu {st.ai ? <span className="chip bg-indigo-100 text-indigo-700">AI</span> : <span className="chip bg-slate-100 text-slate-600">chấm nhanh</span>}{st.aiPending && <span className="ml-2 text-xs font-normal text-slate-500 animate-pulse">🤖 AI đang chấm kỹ hơn… (bạn cứ sang câu tiếp nếu muốn)</span>}</div>
         <div className="flex flex-wrap gap-1">
           {st.scores.filter(([, v]) => v != null).map(([k, v]) => (
             <span key={k} className={`chip ${v >= 8 ? 'bg-emerald-100 text-emerald-800' : v >= 5 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700'}`}>{k} {v}/10</span>
@@ -143,10 +142,10 @@ export function SentenceReview({ transcript, chunks = [], model = '', situationV
       {st.avoid?.length > 0 && <div><span className="text-slate-500">🚫 Không nên: </span>{st.avoid.join(' · ')}</div>}
       {st.praise && <div className="text-emerald-700">👍 {st.praise}</div>}
       {st.tip && <div className="text-slate-600">🎯 {st.tip}</div>}
-      {st.aiError && <div className="text-xs text-rose-600">AI lỗi ({st.aiError}) – đã chuyển sang chấm tự động.</div>}
+      {st.aiError && <div className="text-xs text-rose-600">AI chưa chấm được ({st.aiError.slice(0, 140)}) – đang hiện kết quả chấm nhanh.</div>}
       {st.ltFailed && <div className="text-xs text-slate-500">Không kết nối được LanguageTool, chỉ kiểm tra các lỗi phổ biến của người Việt.</div>}
       {st.ltOff && <div className="text-xs text-slate-500">Sửa ngữ pháp bằng LanguageTool đang tắt (Cài đặt). Chỉ kiểm tra các lỗi phổ biến.</div>}
-      {!st.ai && <div className="text-[11px] text-slate-400">Muốn chấm chi tiết như giáo viên (từ vựng, độ tự nhiên, điều nên tránh)? Nhập API key Gemini miễn phí trong Cài đặt.</div>}
+      {!st.ai && !st.aiPending && !aiEnabled() && <div className="text-[11px] text-slate-400">Muốn chấm chi tiết như giáo viên (từ vựng, độ tự nhiên, điều nên tránh)? Nhập API key Gemini miễn phí trong Cài đặt.</div>}
     </div>
   )
 }

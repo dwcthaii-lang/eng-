@@ -103,7 +103,7 @@ export default function Settings() {
         </label>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" className="mt-1" checked={s.showSentenceVi} onChange={(e) => set({ showSentenceVi: e.target.checked })} />
-          <span>Hiện nghĩa tiếng Việt của câu ví dụ (Lộ trình từ vựng).</span>
+          <span>Hiện nghĩa tiếng Việt của câu ví dụ và câu mẫu.</span>
         </label>
       </div>
 

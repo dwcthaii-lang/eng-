@@ -15,6 +15,16 @@ function extractJson(text) {
 }
 
 export let lastUsedModel = ''
+const PER_CALL_MS = 15000 // mỗi lần gọi tối đa 15 giây
+const TOTAL_MS = 40000 // tổng cộng tối đa 40 giây (kể cả chuyển model)
+const goodModel = {} // model đã chạy tốt trong phiên này (tránh gọi lại model đang quá tải)
+const thinkingSupported = {}
+// Tắt/giảm "suy nghĩ" để trả lời nhanh (chấm câu không cần suy luận dài)
+function thinkingFor(model) {
+  const v = parseFloat((model.match(/^gemini-([\d.]+)/) || [])[1] || '0')
+  if (/pro/.test(model)) return v >= 3 ? { thinkingLevel: 'low' } : null
+  return v >= 3 ? { thinkingLevel: 'low' } : v >= 2.5 ? { thinkingBudget: 0 } : null
+}
 
 // Danh sách model Gemini dùng được với key này, ưu tiên bản "flash" mới nhất, ổn định
 export async function listGeminiModels(key, { all = false } = {}) {
@@ -37,38 +47,57 @@ export async function listGeminiModels(key, { all = false } = {}) {
 export async function askJson(system, user) {
   const s = getState().settings
   if (s.aiProvider === 'gemini' && s.geminiKey) {
-    // Google quá tải (503) / hết lượt (429) / model không tồn tại (404): thử lại rồi chuyển model dự phòng
-    const models = [s.geminiModel || 'gemini-3.8-flash']
+    // Google quá tải (503) / hết lượt (429) / model ngừng (404) / quá chậm (timeout): chuyển model dự phòng
+    const chosen = s.geminiModel || 'gemini-3.8-flash'
+    const models = [...new Set([goodModel[chosen] || chosen, chosen])]
     const tried = new Set()
     let discovered = false
     let lastErr = null
+    const t0 = Date.now()
     for (let mi = 0; mi < models.length && mi < 6; mi++) {
       const model = models[mi]
       if (tried.has(model)) continue
       tried.add(model)
       for (let attempt = 0; attempt < 2; attempt++) {
+        const left = TOTAL_MS - (Date.now() - t0)
+        if (left < 3000) throw lastErr || new Error('AI phản hồi quá chậm (quá 40 giây).')
+        const think = thinkingSupported[model] !== false ? thinkingFor(model) : null
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(s.geminiKey)}`
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: system }] },
-            contents: [{ role: 'user', parts: [{ text: user }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
-          }),
-        })
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), Math.min(PER_CALL_MS, left))
+        let res
+        try {
+          res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: ctrl.signal,
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: system }] },
+              contents: [{ role: 'user', parts: [{ text: user }] }],
+              generationConfig: { responseMimeType: 'application/json', temperature: 0.5, ...(think ? { thinkingConfig: think } : {}) },
+            }),
+          })
+        } catch (e) {
+          clearTimeout(timer)
+          lastErr = new Error(e.name === 'AbortError' ? `Model ${model} trả lời quá chậm, đã chuyển model khác.` : `Lỗi mạng khi gọi Gemini: ${e.message}`)
+          break
+        }
+        clearTimeout(timer)
         if (res.ok) {
           const data = await res.json()
-          const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || ''
+          const text = data.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text).join('') || ''
           lastUsedModel = model
+          goodModel[chosen] = model
           return extractJson(text)
         }
-        lastErr = new Error(`Gemini lỗi ${res.status} (${model}): ${(await res.text()).slice(0, 160)}`)
-        if (res.status === 400 || res.status === 401 || res.status === 403) throw new Error(`Gemini lỗi ${res.status}: API key không hợp lệ hoặc chưa được bật. ${lastErr.message.slice(0, 120)}`)
-        if (res.status === 503 && attempt === 0) { await new Promise((r) => setTimeout(r, 1200)); continue }
+        const body = (await res.text()).slice(0, 300)
+        lastErr = new Error(`Gemini lỗi ${res.status} (${model}): ${body.slice(0, 160)}`)
+        // model không nhận tuỳ chọn "suy nghĩ" → gửi lại không kèm tuỳ chọn đó
+        if (res.status === 400 && think && /think/i.test(body)) { thinkingSupported[model] = false; attempt--; continue }
+        if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key|API_KEY/i.test(body))) throw new Error(`Gemini lỗi ${res.status}: API key không hợp lệ hoặc chưa được bật.`)
+        if (res.status === 503 && attempt === 0) { await new Promise((r) => setTimeout(r, 800)); continue }
         break
       }
-      // Lấy danh sách model Google đang cho phép (model cũ có thể bị ngừng) và thử lần lượt
       if (!discovered && mi === models.length - 1) {
         discovered = true
         models.push(...(await listGeminiModels(s.geminiKey)).filter((m) => !tried.has(m)))
