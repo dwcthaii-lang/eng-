@@ -15,15 +15,16 @@ function extractJson(text) {
 }
 
 export let lastUsedModel = ''
-const PER_CALL_MS = 15000 // mỗi lần gọi tối đa 15 giây
-const TOTAL_MS = 40000 // tổng cộng tối đa 40 giây (kể cả chuyển model)
+const FIRST_MS = 12000 // phải có chữ đầu tiên trong 12 giây, nếu không chuyển model
+const TOTAL_MS = 90000 // tối đa cho cả lượt (kể cả chuyển model, sinh bài dài)
 const goodModel = {} // model đã chạy tốt trong phiên này (tránh gọi lại model đang quá tải)
-const thinkingSupported = {}
-// Tắt/giảm "suy nghĩ" để trả lời nhanh (chấm câu không cần suy luận dài)
-function thinkingFor(model) {
+const thinkIdx = {}
+// Tắt/giảm "suy nghĩ" để có chữ đầu tiên nhanh (thử lần lượt, model không nhận thì bỏ)
+function thinkingOptions(model) {
   const v = parseFloat((model.match(/^gemini-([\d.]+)/) || [])[1] || '0')
-  if (/pro/.test(model)) return v >= 3 ? { thinkingLevel: 'low' } : null
-  return v >= 3 ? { thinkingLevel: 'low' } : v >= 2.5 ? { thinkingBudget: 0 } : null
+  if (v >= 3) return /pro/.test(model) ? [{ thinkingLevel: 'low' }, null] : [{ thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, null]
+  if (v >= 2.5) return /pro/.test(model) ? [{ thinkingBudget: 128 }, null] : [{ thinkingBudget: 0 }, null]
+  return [null]
 }
 
 // Danh sách model Gemini dùng được với key này, ưu tiên bản "flash" mới nhất, ổn định
@@ -44,67 +45,109 @@ export async function listGeminiModels(key, { all = false } = {}) {
   }
 }
 
-export async function askJson(system, user) {
+// Gọi Gemini dạng STREAM: chữ về tới đâu báo tới đó (onText), tự chuyển model khi bận/chậm/ngừng
+async function geminiStream({ system, user, json = false, onText, temperature = 0.5 }) {
   const s = getState().settings
-  if (s.aiProvider === 'gemini' && s.geminiKey) {
-    // Google quá tải (503) / hết lượt (429) / model ngừng (404) / quá chậm (timeout): chuyển model dự phòng
-    const chosen = s.geminiModel || 'gemini-3.8-flash'
-    const models = [...new Set([goodModel[chosen] || chosen, chosen])]
-    const tried = new Set()
-    let discovered = false
-    let lastErr = null
-    const t0 = Date.now()
-    for (let mi = 0; mi < models.length && mi < 6; mi++) {
-      const model = models[mi]
-      if (tried.has(model)) continue
-      tried.add(model)
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const left = TOTAL_MS - (Date.now() - t0)
-        if (left < 3000) throw lastErr || new Error('AI phản hồi quá chậm (quá 40 giây).')
-        const think = thinkingSupported[model] !== false ? thinkingFor(model) : null
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(s.geminiKey)}`
-        const ctrl = new AbortController()
-        const timer = setTimeout(() => ctrl.abort(), Math.min(PER_CALL_MS, left))
-        let res
-        try {
-          res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: ctrl.signal,
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: system }] },
-              contents: [{ role: 'user', parts: [{ text: user }] }],
-              generationConfig: { responseMimeType: 'application/json', temperature: 0.5, ...(think ? { thinkingConfig: think } : {}) },
-            }),
-          })
-        } catch (e) {
-          clearTimeout(timer)
-          lastErr = new Error(e.name === 'AbortError' ? `Model ${model} trả lời quá chậm, đã chuyển model khác.` : `Lỗi mạng khi gọi Gemini: ${e.message}`)
-          break
-        }
-        clearTimeout(timer)
+  const chosen = s.geminiModel || 'gemini-3.8-flash'
+  const models = [...new Set([goodModel[chosen] || chosen, chosen])]
+  const tried = new Set()
+  let discovered = false
+  let lastErr = null
+  const t0 = Date.now()
+  for (let mi = 0; mi < models.length && mi < 6; mi++) {
+    const model = models[mi]
+    if (tried.has(model)) continue
+    tried.add(model)
+    const opts = thinkingOptions(model)
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (Date.now() - t0 > TOTAL_MS) throw lastErr || new Error('AI phản hồi quá chậm.')
+      const think = opts[Math.min(thinkIdx[model] || 0, opts.length - 1)]
+      const ctrl = new AbortController()
+      let timer = setTimeout(() => ctrl.abort(), FIRST_MS)
+      let res
+      try {
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(s.geminiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents: [{ role: 'user', parts: [{ text: user }] }],
+            generationConfig: { temperature, ...(json ? { responseMimeType: 'application/json' } : {}), ...(think ? { thinkingConfig: think } : {}) },
+          }),
+        })
         if (res.ok) {
-          const data = await res.json()
-          const text = data.candidates?.[0]?.content?.parts?.filter((p) => !p.thought).map((p) => p.text).join('') || ''
+          const reader = res.body.getReader()
+          const dec = new TextDecoder()
+          let buf = '', text = '', got = false
+          for (;;) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += dec.decode(value, { stream: true })
+            let i
+            while ((i = buf.indexOf('\n')) >= 0) {
+              const line = buf.slice(0, i).trim()
+              buf = buf.slice(i + 1)
+              if (!line.startsWith('data:')) continue
+              try {
+                const d = JSON.parse(line.slice(5))
+                const t = (d.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought && p.text).map((p) => p.text).join('')
+                if (t) {
+                  text += t
+                  if (!got) { got = true; clearTimeout(timer); timer = setTimeout(() => ctrl.abort(), TOTAL_MS) }
+                  onText?.(text)
+                }
+              } catch {}
+            }
+          }
+          clearTimeout(timer)
+          if (!text) { lastErr = new Error(`Model ${model} không trả lời.`); break }
           lastUsedModel = model
           goodModel[chosen] = model
-          return extractJson(text)
+          return text
         }
-        const body = (await res.text()).slice(0, 300)
-        lastErr = new Error(`Gemini lỗi ${res.status} (${model}): ${body.slice(0, 160)}`)
-        // model không nhận tuỳ chọn "suy nghĩ" → gửi lại không kèm tuỳ chọn đó
-        if (res.status === 400 && think && /think/i.test(body)) { thinkingSupported[model] = false; attempt--; continue }
-        if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key|API_KEY/i.test(body))) throw new Error(`Gemini lỗi ${res.status}: API key không hợp lệ hoặc chưa được bật.`)
-        if (res.status === 503 && attempt === 0) { await new Promise((r) => setTimeout(r, 800)); continue }
+      } catch (e) {
+        clearTimeout(timer)
+        lastErr = new Error(e.name === 'AbortError' ? `Model ${model} trả lời quá chậm, đã chuyển model khác.` : `Lỗi mạng khi gọi Gemini: ${e.message}`)
         break
       }
-      if (!discovered && mi === models.length - 1) {
-        discovered = true
-        models.push(...(await listGeminiModels(s.geminiKey)).filter((m) => !tried.has(m)))
-      }
+      clearTimeout(timer)
+      const body = (await res.text()).slice(0, 300)
+      lastErr = new Error(`Gemini lỗi ${res.status} (${model}): ${body.slice(0, 160)}`)
+      if (res.status === 400 && think && /think/i.test(body)) { thinkIdx[model] = (thinkIdx[model] || 0) + 1; continue }
+      if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key|API_KEY/i.test(body))) throw new Error(`Gemini lỗi ${res.status}: API key không hợp lệ hoặc chưa được bật.`)
+      if (res.status === 503 && attempt === 0) { await new Promise((r) => setTimeout(r, 800)); continue }
+      break
     }
-    throw lastErr
+    if (!discovered && mi === models.length - 1) {
+      discovered = true
+      models.push(...(await listGeminiModels(s.geminiKey)).filter((m) => !tried.has(m)))
+    }
   }
+  throw lastErr
+}
+
+// Văn bản tự do (có stream nếu dùng Gemini)
+export async function askText(system, user, onText) {
+  const s = getState().settings
+  if (s.aiProvider === 'gemini' && s.geminiKey) return geminiStream({ system, user, onText, temperature: 0.3 })
+  if (s.aiProvider === 'openai' && s.openaiKey) {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.openaiKey}` },
+      body: JSON.stringify({ model: s.openaiModel || 'gpt-4o-mini', temperature: 0.3, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+    })
+    if (!res.ok) throw new Error(`OpenAI lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`)
+    const text = (await res.json()).choices?.[0]?.message?.content || ''
+    onText?.(text)
+    return text
+  }
+  throw new Error('Chưa cấu hình API key trong Cài đặt')
+}
+
+export async function askJson(system, user) {
+  const s = getState().settings
+  if (s.aiProvider === 'gemini' && s.geminiKey) return extractJson(await geminiStream({ system, user, json: true, temperature: 0.7 }))
   if (s.aiProvider === 'openai' && s.openaiKey) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -252,24 +295,53 @@ Return JSON: {"items": [{"en": "word/chunk", "vi": "nghĩa tiếng Việt ngắn
   )
 }
 
-// Chấm & sửa CẢ CÂU người học nói: lỗi ở đâu, không nên dùng gì, sửa thế nào
-export function reviewSentence({ situationVi = '', context = '', chunks = [], transcript, model = '' }) {
-  return askJson(
-    `You are a strict but friendly English speaking coach. ${LEARNER} Explanations must be in Vietnamese. Return JSON only.`,
-    `Situation (Vietnamese): ${situationVi}
+// Chấm & sửa CẢ CÂU người học nói – trả về dạng dòng để hiện dần (stream)
+export function reviewSentence({ situationVi = '', context = '', chunks = [], transcript, model = '' }, onPartial) {
+  const system = `You are a strict, expert English speaking teacher for Vietnamese learners (IELTS examiner standard). ${LEARNER}
+Judge MEANING and USAGE, not just whether target words appear. A sentence that merely strings the target chunks together, uses a chunk with the wrong meaning or grammar, is a fragment/run-on, or does not do what the situation asks must NOT get a high score.
+All explanations in Vietnamese: concrete and teaching-oriented — name the rule or collocation, say why it sounds wrong/odd to a native speaker, and give a short correct example. No generic praise.
+Output ONLY plain-text lines in exactly this format (no markdown, no extra lines):
+SCORE: <0-10>
+SUB: grammar=<0-10>; vocab=<0-10>; natural=<0-10>; task=<0-10>
+VERDICT: <1-2 câu: câu này có làm đúng yêu cầu tình huống không, người nghe hiểu thế nào, vấn đề lớn nhất>
+ERR: <exact words copied from learner's sentence> => <correction> => <grammar|word|usage|unnatural|missing> => <giải thích sâu: quy tắc + vì sao sai + ví dụ đúng>
+CHUNK: <target chunk> => <ok|wrong|unnatural|missing> => <nhận xét cách người học dùng cụm này (đúng nghĩa? đúng cấu trúc? đúng chỗ?) + cách dùng chuẩn + ví dụ>
+FIXED: <learner's sentence minimally corrected, keep their idea and words>
+NATIVE: <how a native speaker would naturally say it in this situation>
+NATIVE_VI: <dịch NATIVE sang tiếng Việt>
+AVOID: <1 thói quen/cách nói nên tránh, có lý do>
+TIP: <1 mẹo cụ thể để lần sau nói tốt hơn>
+Rules: SCORE first. ERR lines ordered by importance (0-5 lines; write none if the sentence is truly fine). One CHUNK line per target chunk.
+Scoring: 9-10 = grammatical, natural AND fully does the task. Chunks used incorrectly/unnaturally or a fragmented sentence → max 6. Task not achieved → max 5. Ignore punctuation/capitalization (speech recognition).`
+  const user = `Situation (Vietnamese): ${situationVi}
 Context: ${context}
 Target chunks: ${chunks.join('; ')}
 Reference answer: ${model}
-Learner said: "${transcript}"
+Learner said: "${transcript}"`
+  return askText(system, user, (t) => onPartial?.(parseReview(t))).then(parseReview)
+}
 
-Review the WHOLE sentence the learner said (not only the chunks). Ignore capitalization and punctuation (speech recognition). Find every real error: grammar (verb form, tense, agreement, articles, prepositions, word order), wrong word choice, unnatural/awkward phrasing, and things a native speaker would avoid. Return JSON:
-{"score": 0-10 overall,
- "scores": {"grammar": 0-10, "vocab": 0-10, "natural": 0-10, "meaning": 0-10},
- "errors": [{"wrong": "exact words from learner's sentence", "fix": "corrected words", "type": "grammar|word|unnatural|avoid", "why_vi": "giải thích ngắn bằng tiếng Việt"}],
- "corrected": "learner's sentence with ONLY the errors fixed (keep their wording)",
- "natural": "how a native speaker would naturally say it",
- "avoid_vi": ["điều không nên dùng / thói quen cần bỏ (0-2 items)"],
- "praise_vi": "1 điểm làm tốt",
- "tip_vi": "1 mẹo ngắn để nói tốt hơn lần sau"}`
-  )
+const num = (x) => { const n = parseFloat(x); return Number.isFinite(n) ? Math.max(0, Math.min(10, Math.round(n))) : undefined }
+export function parseReview(text) {
+  const out = { errors: [], chunks: [], sub: {} }
+  const lines = String(text).split('\n')
+  const complete = /\n\s*$/.test(text) ? lines : lines.slice(0, -1) // dòng cuối có thể chưa xong
+  for (const raw of complete) {
+    const line = raw.replace(/^[\s*\-•#]+/, '').trim()
+    const m = line.match(/^([A-Z_]+)\s*:\s*(.*)$/)
+    if (!m) continue
+    const [, k, v] = m
+    const parts = v.split('=>').map((x) => x.trim())
+    if (k === 'SCORE') out.score = num(v)
+    else if (k === 'SUB') v.split(/[;,]/).forEach((kv) => { const [a, b] = kv.split('='); if (a && b) out.sub[a.trim().toLowerCase()] = num(b) })
+    else if (k === 'VERDICT') out.verdict = v
+    else if (k === 'ERR' && parts.length >= 2) out.errors.push({ wrong: parts[0].replace(/^["“]|["”]$/g, ''), fix: parts[1], type: (parts[2] || 'grammar').toLowerCase(), why_vi: parts.slice(3).join(' => ') })
+    else if (k === 'CHUNK' && parts.length >= 2) out.chunks.push({ chunk: parts[0], status: parts[1].toLowerCase(), note: parts.slice(2).join(' => ') })
+    else if (k === 'FIXED') out.corrected = v
+    else if (k === 'NATIVE') out.natural = v
+    else if (k === 'NATIVE_VI') out.naturalVi = v
+    else if (k === 'AVOID') out.avoid = v
+    else if (k === 'TIP') out.tip = v
+  }
+  return out
 }

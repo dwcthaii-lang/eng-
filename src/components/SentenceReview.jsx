@@ -1,5 +1,5 @@
 // CHẤM & SỬA CẢ CÂU người học nói/gõ
-// - Có API key: AI chấm 4 tiêu chí (ngữ pháp, từ vựng, tự nhiên, đủ ý), chỉ lỗi, câu đã sửa, cách nói tự nhiên, điều nên tránh
+// - Có API key: AI chấm như giáo viên (ngữ pháp, từ vựng, tự nhiên, đúng yêu cầu), nhận xét cách dùng từng cụm từ, hiện dần (stream)
 // - Không có key: luật lỗi hay gặp của người Việt + LanguageTool (miễn phí), dịch giải thích sang tiếng Việt
 import { useEffect, useState } from 'react'
 import { useStore } from '../lib/store'
@@ -36,21 +36,59 @@ const SKIP_CAT = new Set(['CASING', 'PUNCTUATION', 'TYPOGRAPHY', 'TYPOS_WHITESPA
 const SKIP_RULE = /UPPERCASE|COMMA|WHITESPACE|QUOTES|SENTENCE_FRAGMENT|I_LOWERCASE|PUNCT|EN_A_VS_AN_CAPS/
 function overlaps(a, b) { return a.offset < b.offset + b.length && b.offset < a.offset + a.length }
 
-const TYPE = { grammar: ['Ngữ pháp', 'bg-rose-100 text-rose-700'], word: ['Chọn từ', 'bg-amber-100 text-amber-800'], unnatural: ['Chưa tự nhiên', 'bg-sky-100 text-sky-800'], avoid: ['Nên tránh', 'bg-slate-200 text-slate-700'], misspelling: ['Chính tả / nhận dạng', 'bg-slate-100 text-slate-600'] }
+const TYPE = {
+  grammar: ['Ngữ pháp', 'bg-rose-100 text-rose-700'],
+  word: ['Chọn từ', 'bg-amber-100 text-amber-800'],
+  usage: ['Cách dùng', 'bg-amber-100 text-amber-800'],
+  unnatural: ['Chưa tự nhiên', 'bg-sky-100 text-sky-800'],
+  missing: ['Thiếu ý', 'bg-slate-200 text-slate-700'],
+  avoid: ['Nên tránh', 'bg-slate-200 text-slate-700'],
+  misspelling: ['Chính tả / nhận dạng', 'bg-slate-100 text-slate-600'],
+}
+const CHUNK_ST = { ok: ['✅', 'text-emerald-700'], wrong: ['❌', 'text-rose-700'], unnatural: ['⚠️', 'text-amber-700'], missing: ['➖', 'text-slate-500'] }
+const QUICK_CAP = 8 // chấm nhanh không hiểu ý nghĩa → không cho điểm tuyệt đối
 
+function quickCheck({ transcript, chunks, model, errors }) {
+  const used = chunks.filter((c) => chunkUsed(c, transcript))
+  const chunkScore = chunks.length ? (used.length / chunks.length) * 10 : 10
+  const real = errors.filter((e) => e.type !== 'misspelling').length
+  const grammarScore = Math.max(0, 10 - real * 2)
+  const sim = model ? similarity(transcript, model) : 0.5
+  const naturalScore = Math.max(0, Math.round(Math.min(10, sim * 14) - errors.filter((e) => e.type === 'word' || e.type === 'unnatural').length * 2))
+  const short = normalize(transcript).length < 5 ? 2 : 0
+  const score = Math.min(QUICK_CAP, Math.max(0, Math.round(chunkScore * 0.35 + grammarScore * 0.25 + naturalScore * 0.4 - short)))
+  return { score, scores: [['Dùng cụm từ', Math.round(chunkScore)], ['Ngữ pháp (máy)', Math.round(grammarScore)], ['Giống câu mẫu', naturalScore]] }
+}
+
+// onScore(score | null): null = AI đang chấm (chưa có điểm cuối)
 export function SentenceReview({ transcript, chunks = [], model = '', situationVi = '', context = '', onScore }) {
   const grammarOn = useStore((s) => s.settings.grammarCheck)
-  const [st, setSt] = useState({ loading: true })
+  const [quick, setQuick] = useState(null)
+  const [ai, setAi] = useState(null) // { ...parseReview, done }
+  const [aiState, setAiState] = useState(aiEnabled() ? 'pending' : 'off') // off | pending | done | error
+  const [aiError, setAiError] = useState('')
 
   useEffect(() => {
     let alive = true
-    const run = async () => {
-      const used = chunks.filter((c) => chunkUsed(c, transcript))
-      const chunkScore = chunks.length ? (used.length / chunks.length) * 10 : 10
-      // AI chạy song song; kết quả chấm nhanh (luật + LanguageTool) hiện trước
-      const aiOn = !!aiEnabled()
-      const aiPromise = aiOn ? reviewSentence({ situationVi, context, chunks, transcript, model }).then((r) => ({ r }), (e) => ({ e })) : null
-      // Chấm nhanh: luật lỗi người Việt + LanguageTool
+    const aiOn = !!aiEnabled()
+    if (aiOn) {
+      onScore?.(null)
+      reviewSentence({ situationVi, context, chunks, transcript, model }, (part) => alive && setAi({ ...part, done: false }))
+        .then((final) => {
+          if (!alive) return
+          if (final.score == null) throw new Error('AI trả lời sai định dạng')
+          setAi({ ...final, done: true })
+          setAiState('done')
+          onScore?.(final.score)
+        })
+        .catch((e) => {
+          if (!alive) return
+          setAiError(String(e.message || e))
+          setAiState('error')
+          setQuick((q) => { if (q) onScore?.(q.score); return q })
+        })
+    }
+    ;(async () => {
       let errors = localErrors(transcript)
       let ltFailed = false
       if (grammarOn) {
@@ -65,87 +103,103 @@ export function SentenceReview({ transcript, chunks = [], model = '', situationV
       errors.sort((a, b) => a.offset - b.offset)
       let corrected = transcript
       ;[...errors].sort((a, b) => b.offset - a.offset).forEach((e) => { if (e.offset >= 0 && e.fix != null) corrected = corrected.slice(0, e.offset) + e.fix + corrected.slice(e.offset + e.length) })
-      const real = errors.filter((e) => e.type !== 'misspelling').length
-      const grammarScore = Math.max(0, 10 - real * 2)
-      const sim = model ? similarity(transcript, model) : 0.5
-      const naturalScore = Math.round(Math.min(10, 3 + sim * 9 - errors.filter((e) => e.type === 'word' || e.type === 'unnatural').length * 2))
-      const short = normalize(transcript).length < 5 ? 2 : 0
-      const score = Math.max(0, Math.round(chunkScore * 0.45 + grammarScore * 0.4 + Math.max(0, naturalScore) * 0.15 - short))
+      const q = { ...quickCheck({ transcript, chunks, model, errors }), errors, corrected: errors.length ? corrected : '', ltFailed: grammarOn && ltFailed, ltOff: !grammarOn }
       if (!alive) return
-      setSt((x) => ({ ...x, loading: false, ai: false, aiPending: aiOn, errors, corrected: errors.length ? corrected : '', ltFailed: grammarOn && ltFailed, ltOff: !grammarOn, scores: [['Dùng cụm từ', Math.round(chunkScore)], ['Ngữ pháp', Math.round(grammarScore)], ['Giống câu mẫu', Math.max(0, naturalScore)]], score }))
-      onScore?.(score)
-      // dịch giải thích của LanguageTool sang tiếng Việt
+      setQuick(q)
+      if (!aiOn) onScore?.(q.score)
+      setAiState((st) => { if (st === 'error') onScore?.(q.score); return st })
       errors.forEach((e, i) => {
         if (!e.whyEn) return
         translateText(e.why).then((r) => {
-          if (r && alive) setSt((x) => ({ ...x, errors: x.errors.map((y, j) => (j === i ? { ...y, whyVi: r.vi } : y)) }))
+          if (r && alive) setQuick((x) => x && { ...x, errors: x.errors.map((y, j) => (j === i ? { ...y, whyVi: r.vi } : y)) })
         })
       })
-      if (aiPromise) {
-        const out = await aiPromise
-        if (!alive) return
-        if (out.e) { setSt((x) => ({ ...x, aiPending: false, aiError: String(out.e.message || out.e) })); return }
-        const ai = out.r
-        const aiErrors = (ai.errors || []).filter((e) => e && e.wrong).map((e) => {
-          const i = transcript.toLowerCase().indexOf(String(e.wrong).toLowerCase())
-          return { ...e, offset: i, length: i >= 0 ? e.wrong.length : 0, src: 'ai' }
-        })
-        const aiScore = Math.max(0, Math.min(10, Math.round(Number(ai.score) || 0)))
-        setSt({ loading: false, ai: true, errors: aiErrors, corrected: ai.corrected, natural: ai.natural, avoid: ai.avoid_vi || [], praise: ai.praise_vi, tip: ai.tip_vi, scores: [['Dùng cụm từ', Math.round(chunkScore)], ['Ngữ pháp', ai.scores?.grammar], ['Từ vựng', ai.scores?.vocab], ['Tự nhiên', ai.scores?.natural], ['Đủ ý', ai.scores?.meaning]], score: aiScore })
-        onScore?.(aiScore)
-        return
-      }
-    }
-    run()
+    })()
     return () => { alive = false }
   }, [transcript])
 
-  if (st.loading) return <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">🔎 Đang chấm cả câu…</div>
+  const hasAi = ai && (ai.score != null || ai.verdict)
+  if (!hasAi && !quick) return <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">🔎 Đang chấm cả câu…</div>
+  if (hasAi) return <AiView ai={ai} transcript={transcript} />
 
   return (
     <div className="space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-semibold">📝 Chấm cả câu {st.ai ? <span className="chip bg-indigo-100 text-indigo-700">AI</span> : <span className="chip bg-slate-100 text-slate-600">chấm nhanh</span>}{st.aiPending && <span className="ml-2 text-xs font-normal text-slate-500 animate-pulse">🤖 AI đang chấm kỹ hơn… (bạn cứ sang câu tiếp nếu muốn)</span>}</div>
-        <div className="flex flex-wrap gap-1">
-          {st.scores.filter(([, v]) => v != null).map(([k, v]) => (
-            <span key={k} className={`chip ${v >= 8 ? 'bg-emerald-100 text-emerald-800' : v >= 5 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700'}`}>{k} {v}/10</span>
-          ))}
+        <div className="font-semibold">📝 Chấm cả câu <span className="chip bg-slate-100 text-slate-600">chấm nhanh · điểm sơ bộ</span>{aiState === 'pending' && <span className="ml-2 text-xs font-normal text-indigo-600 animate-pulse">🤖 AI đang chấm ngữ nghĩa & cách dùng từ…</span>}</div>
+        <Chips scores={quick.scores} />
+      </div>
+      <div className="leading-relaxed"><span className="text-slate-500">Câu của bạn: </span><Marked text={transcript} errors={quick.errors} /></div>
+      {quick.errors.length === 0 ? (
+        <div className="text-slate-600">Máy không bắt được lỗi ngữ pháp phổ biến nào. <b>Chấm nhanh chưa đánh giá được ý nghĩa và cách dùng từ</b>, nên điểm tối đa là {QUICK_CAP}/10.</div>
+      ) : <ErrorList errors={quick.errors} />}
+      {quick.corrected && quick.corrected !== transcript && <div><span className="text-slate-500">✏️ Câu đã sửa (máy): </span><b>{quick.corrected}</b> <button onClick={() => speak(quick.corrected)}>🔈</button></div>}
+      {aiState === 'error' && <div className="text-xs text-rose-600">AI chưa chấm được: {aiError.slice(0, 160)}</div>}
+      {quick.ltFailed && <div className="text-xs text-slate-500">Không kết nối được LanguageTool, chỉ kiểm tra các lỗi phổ biến của người Việt.</div>}
+      {aiState === 'off' && <div className="text-[11px] text-slate-400">Muốn chấm ý nghĩa, cách dùng từ và độ tự nhiên như giáo viên? Nhập API key Gemini miễn phí trong Cài đặt.</div>}
+    </div>
+  )
+}
+
+function Chips({ scores }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {scores.filter(([, v]) => v != null).map(([k, v]) => (
+        <span key={k} className={`chip ${v >= 8 ? 'bg-emerald-100 text-emerald-800' : v >= 5 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-700'}`}>{k} {v}/10</span>
+      ))}
+    </div>
+  )
+}
+
+function ErrorList({ errors }) {
+  return (
+    <div className="space-y-1.5">
+      {errors.map((e, i) => (
+        <div key={i} className="rounded-lg bg-white p-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`chip ${(TYPE[e.type] || TYPE.grammar)[1]}`}>{(TYPE[e.type] || TYPE.grammar)[0]}</span>
+            <span className="text-rose-700 line-through decoration-rose-300">{e.wrong}</span>
+            {e.fix ? <>→ <b className="text-emerald-700">{e.fix}</b></> : null}
+          </div>
+          <div className="mt-0.5 text-slate-700">💡 {e.why_vi || e.whyVi || e.why}{e.whyEn && e.whyVi && <span className="block text-[11px] text-slate-400">{e.why}</span>}</div>
         </div>
-      </div>
+      ))}
+    </div>
+  )
+}
 
-      <div className="leading-relaxed">
-        <span className="text-slate-500">Câu của bạn: </span>
-        <Marked text={transcript} errors={st.errors} />
+function AiView({ ai, transcript }) {
+  const errors = ai.errors.map((e) => {
+    const i = transcript.toLowerCase().indexOf(String(e.wrong).toLowerCase())
+    return { ...e, offset: i, length: i >= 0 ? e.wrong.length : 0 }
+  })
+  const sub = ai.sub || {}
+  return (
+    <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-semibold">📝 Chấm cả câu <span className="chip bg-indigo-100 text-indigo-700">AI · giáo viên</span>{!ai.done && <span className="ml-2 text-xs font-normal text-indigo-600 animate-pulse">đang viết…</span>}</div>
+        <Chips scores={[['Ngữ pháp', sub.grammar], ['Từ vựng', sub.vocab], ['Tự nhiên', sub.natural], ['Đúng yêu cầu', sub.task]]} />
       </div>
-
-      {st.errors.length === 0 ? (
-        <div className="text-emerald-700">✅ Không thấy lỗi ngữ pháp rõ ràng.{!st.ai && ' (Chấm tự động chỉ bắt được lỗi phổ biến; nhập API key Gemini để được chấm kỹ như giáo viên.)'}</div>
-      ) : (
-        <div className="space-y-1.5">
-          {st.errors.map((e, i) => (
-            <div key={i} className="rounded-lg bg-white p-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`chip ${(TYPE[e.type] || TYPE.grammar)[1]}`}>{(TYPE[e.type] || TYPE.grammar)[0]}</span>
-                <span className="text-rose-700 line-through decoration-rose-300">{e.wrong}</span>
-                {e.fix ? <>→ <b className="text-emerald-700">{e.fix}</b></> : null}
-              </div>
-              <div className="mt-0.5 text-slate-600">💡 {e.why_vi || e.whyVi || e.why}{e.whyEn && e.whyVi && <span className="block text-[11px] text-slate-400">{e.why}</span>}</div>
-            </div>
-          ))}
+      {ai.verdict && <div className="rounded-lg bg-white p-2 text-slate-800">🧑‍🏫 {ai.verdict}</div>}
+      <div className="leading-relaxed"><span className="text-slate-500">Câu của bạn: </span><Marked text={transcript} errors={errors} /></div>
+      {errors.length > 0 && <ErrorList errors={errors} />}
+      {ai.chunks.length > 0 && (
+        <div className="space-y-1">
+          <div className="label">Cách bạn dùng các cụm từ</div>
+          {ai.chunks.map((c, i) => {
+            const [icon, cls] = CHUNK_ST[c.status] || CHUNK_ST.unnatural
+            return <div key={i} className="rounded-lg bg-white p-2"><span className={`font-semibold ${cls}`}>{icon} {c.chunk}</span> <span className="text-slate-700">– {c.note}</span></div>
+          })}
         </div>
       )}
-
-      {st.corrected && st.corrected !== transcript && (
-        <div><span className="text-slate-500">✏️ Câu đã sửa: </span><b>{st.corrected}</b> <button onClick={() => speak(st.corrected)}>🔈</button></div>
+      {ai.corrected && ai.corrected !== transcript && <div><span className="text-slate-500">✏️ Câu của bạn, đã sửa: </span><b>{ai.corrected}</b> <button onClick={() => speak(ai.corrected)}>🔈</button></div>}
+      {ai.natural && (
+        <div>
+          <span className="text-slate-500">🗣️ Người bản xứ sẽ nói: </span><b className="text-indigo-700">{ai.natural}</b> <button onClick={() => speak(ai.natural)}>🔈</button>
+          {ai.naturalVi && <div className="text-slate-500">🇻🇳 {ai.naturalVi}</div>}
+        </div>
       )}
-      {st.natural && <div><span className="text-slate-500">🗣️ Người bản xứ sẽ nói: </span><b className="text-indigo-700">{st.natural}</b> <button onClick={() => speak(st.natural)}>🔈</button></div>}
-      {st.avoid?.length > 0 && <div><span className="text-slate-500">🚫 Không nên: </span>{st.avoid.join(' · ')}</div>}
-      {st.praise && <div className="text-emerald-700">👍 {st.praise}</div>}
-      {st.tip && <div className="text-slate-600">🎯 {st.tip}</div>}
-      {st.aiError && <div className="text-xs text-rose-600">AI chưa chấm được ({st.aiError.slice(0, 140)}) – đang hiện kết quả chấm nhanh.</div>}
-      {st.ltFailed && <div className="text-xs text-slate-500">Không kết nối được LanguageTool, chỉ kiểm tra các lỗi phổ biến của người Việt.</div>}
-      {st.ltOff && <div className="text-xs text-slate-500">Sửa ngữ pháp bằng LanguageTool đang tắt (Cài đặt). Chỉ kiểm tra các lỗi phổ biến.</div>}
-      {!st.ai && !st.aiPending && !aiEnabled() && <div className="text-[11px] text-slate-400">Muốn chấm chi tiết như giáo viên (từ vựng, độ tự nhiên, điều nên tránh)? Nhập API key Gemini miễn phí trong Cài đặt.</div>}
+      {ai.avoid && <div><span className="text-slate-500">🚫 Nên tránh: </span>{ai.avoid}</div>}
+      {ai.tip && <div className="text-slate-700">🎯 {ai.tip}</div>}
     </div>
   )
 }

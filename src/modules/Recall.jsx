@@ -165,7 +165,7 @@ function RecallCard({ item, settings, onDone }) {
   const evaluate = useCallback(
     async (transcript) => {
       const local = localScore({ transcript, chunks, model: isWord ? '' : p.model })
-      setAnswer({ transcript, local, review: null })
+      setAnswer({ transcript, local, review: undefined })
       if (!recorded) {
         setRecorded(true)
         chunks.forEach((c) => recordSpoken(c, { correct: chunkUsed(c, transcript), aided: hintShown }))
@@ -252,7 +252,7 @@ function RecallCard({ item, settings, onDone }) {
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <div className="label">Kết quả</div>
-            <div className="text-2xl font-bold" title="Điểm cả câu: cụm từ + ngữ pháp + độ tự nhiên">{answer.review ?? answer.local.score}<span className="text-base text-slate-400">/10</span></div>
+            <div className="text-2xl font-bold" title="Điểm cả câu: cụm từ + ngữ pháp + độ tự nhiên">{answer.review === null ? <span className="text-base text-indigo-500 animate-pulse">AI đang chấm…</span> : answer.review ?? answer.local.score}<span className="text-base text-slate-400">/10</span></div>
           </div>
           <div className="text-sm">
             <span className="text-slate-500">Bạn nói: </span>“{answer.transcript}”
