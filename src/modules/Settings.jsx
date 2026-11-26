@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useStore, update, getState, replaceState, resetAll } from '../lib/store'
 import { useVoices, speak, sttSupported, ttsSupported } from '../lib/speech'
-import { testConnection, lastUsedModel, listGeminiModels, benchmarkModels, quotaStatus, clearQuotaBlocks } from '../lib/ai'
+import { testConnection, lastUsedModel, listGeminiModels, benchmarkModels, quotaStatus, clearQuotaBlocks, checkGeminiKeys } from '../lib/ai'
 import { PageHeader } from '../components/ui'
 
 function Field({ label, hint, children }) {
@@ -246,6 +246,7 @@ export default function Settings() {
 // Khi AI hết lượt / quá tải: key dự phòng + tình trạng hạn mức
 function QuotaPanel({ s, set }) {
   const [, force] = useState(0)
+  const [keyRows, setKeyRows] = useState(null)
   const q = quotaStatus()
   const fmt = (t) => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
   return (
@@ -263,6 +264,12 @@ function QuotaPanel({ s, set }) {
       <Field label="Key OpenAI dự phòng (tuỳ chọn, trả phí theo dùng)" hint="Chỉ dùng khi mọi key/model Gemini đều hết lượt hoặc quá tải.">
         <input className="input" type="password" value={s.openaiKey || ''} onChange={(e) => set({ openaiKey: e.target.value.trim() })} placeholder="sk-…" />
       </Field>
+      <div className="space-y-1">
+        <button className="btn-ghost !py-1" onClick={async () => { setKeyRows('run'); setKeyRows(await checkGeminiKeys()) }}>{keyRows === 'run' ? '⏳ Đang kiểm tra…' : '🔑 Kiểm tra từng key'}</button>
+        {Array.isArray(keyRows) && keyRows.map((k, i) => (
+          <div key={i} className={`text-xs ${k.ok ? 'text-emerald-700' : 'text-rose-700'}`}>{i === 0 ? 'Key chính' : `Key dự phòng ${i}`} ({k.key}): {k.ok ? `✅ dùng được (${k.n} model)` : `❌ ${k.why}`}</div>
+        ))}
+      </div>
       <div className="text-xs">
         {q.length === 0 ? <span className="text-emerald-700">✓ Hiện không có model nào bị tạm khoá.</span> : (
           <div className="space-y-0.5">

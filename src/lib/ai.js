@@ -80,6 +80,26 @@ export function subscribeAiNotice(fn) { noticeSubs.add(fn); return () => noticeS
 export function getAiNotice() { return notice }
 function setNotice(n) { notice = n; noticeSubs.forEach((f) => f(n)) }
 
+// Giải thích lỗi key bằng tiếng Việt
+export function keyErrorVi(body = '') {
+  if (/ACCESS_TOKEN_TYPE_UNSUPPORTED/.test(body)) return 'đây không phải API key Gemini (key đúng bắt đầu bằng “AIza…”, lấy ở aistudio.google.com → Get API key)'
+  if (/API_KEY_INVALID|API key not valid/i.test(body)) return 'key sai hoặc đã bị xoá'
+  if (/SERVICE_DISABLED|has not been used|disabled/i.test(body)) return 'project của key chưa bật Generative Language API'
+  if (/PERMISSION_DENIED|location is not supported/i.test(body)) return 'key bị từ chối (vùng/quyền)'
+  return 'key không dùng được'
+}
+// Kiểm tra từng key (Cài đặt)
+export async function checkGeminiKeys() {
+  const keys = geminiKeys(getState().settings)
+  return Promise.all(keys.map(async (key) => {
+    try {
+      const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } })
+      if (r.ok) { const d = await r.json(); return { key: '…' + kid(key), ok: true, n: (d.models || []).length } }
+      return { key: '…' + kid(key), ok: false, why: keyErrorVi(await r.text()) }
+    } catch (e) { return { key: '…' + kid(key), ok: false, why: 'không kết nối được: ' + String(e.message || e).slice(0, 60) } }
+  }))
+}
+
 // Tóm tắt tình trạng hạn mức (Cài đặt)
 export function quotaStatus() {
   const now = Date.now()
@@ -157,9 +177,9 @@ function attemptModel({ model, key, system, user, json, temperature, onFirst, on
       if (ctrl.signal.aborted) throw new Error('aborted')
       const think = opts[Math.min(st(model).think || 0, opts.length - 1)]
       usedLastMinute(id); (reqLog[id] ||= []).push(Date.now())
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         signal: ctrl.signal,
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
@@ -174,6 +194,7 @@ function attemptModel({ model, key, system, user, json, temperature, onFirst, on
         err.status = res.status
         if (res.status === 429) err.quota = parseQuotaError(body)
         if (res.status === 429 || res.status >= 500) noteBlock(key, model, res.status, body)
+        err.body = body
         if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key|API_KEY/i.test(body))) err.fatal = true
         throw err
       }
@@ -275,7 +296,13 @@ function geminiStream({ system, user, json = false, onText, temperature = 0.5, m
         (e) => {
           live.delete(p.id)
           if (finished || e.message === 'aborted') return
-          if (e.fatal) return end(reject, new Error('Gemini: API key không hợp lệ hoặc chưa được bật.'))
+          if (e.fatal) {
+            // key hỏng: bỏ mọi model của key này, vẫn thử các key khác
+            pairs.filter((x) => x.key === p.key).forEach((x) => dead.add(x.id))
+            errs.push(`key …${kid(p.key)}: ${keyErrorVi(e.body)}`)
+            if (pairs.every((x) => dead.has(x.id))) return end(reject, new Error(`Gemini: không key nào dùng được – ${errs.join('; ')}`))
+            return launch()
+          }
           lastErr = e
           errs.push(`${p.model}: ${e.status === 404 ? 'không tồn tại với key này' : e.status === 429 ? (e.quota?.perDay ? 'hết lượt hôm nay' : 'hết lượt/phút') : e.status >= 500 ? 'Google đang quá tải' : String(e.message).slice(0, 60)}`)
           if (e.status !== 429) recordFail(p.model, e.status)
@@ -326,7 +353,7 @@ export async function benchmarkModels(onRow) {
 // Danh sách model Gemini dùng được với key này, ưu tiên bản "flash" mới nhất, ổn định (gồm cả bản lite – hạn mức riêng)
 export async function listGeminiModels(key, { all = false } = {}) {
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`)
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } })
     if (!r.ok) return []
     const d = await r.json()
     const names = (d.models || [])
