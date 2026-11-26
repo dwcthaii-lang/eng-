@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useStore, update, getState, replaceState, resetAll } from '../lib/store'
 import { useVoices, speak, sttSupported, ttsSupported } from '../lib/speech'
-import { testConnection } from '../lib/ai'
+import { testConnection, lastUsedModel } from '../lib/ai'
 import { PageHeader } from '../components/ui'
 
 function Field({ label, hint, children }) {
@@ -51,7 +51,7 @@ export default function Settings() {
   const runTest = async () => {
     setTest('Đang kiểm tra…')
     try {
-      setTest((await testConnection()) ? '✅ Kết nối thành công' : '⚠️ Phản hồi lạ')
+      setTest((await testConnection()) ? `✅ Kết nối thành công${lastUsedModel && lastUsedModel !== getState().settings.geminiModel && getState().settings.aiProvider === 'gemini' ? ` (model bạn chọn đang bận/không có, app đã tự dùng ${lastUsedModel})` : ''}` : '⚠️ Phản hồi lạ')
     } catch (e) {
       setTest('❌ ' + (e.message || e))
     }

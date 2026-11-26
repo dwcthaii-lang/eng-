@@ -14,23 +14,40 @@ function extractJson(text) {
   throw new Error('AI không trả về JSON hợp lệ')
 }
 
+export let lastUsedModel = ''
+
 export async function askJson(system, user) {
   const s = getState().settings
   if (s.aiProvider === 'gemini' && s.geminiKey) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.geminiModel || 'gemini-2.5-flash')}:generateContent?key=${encodeURIComponent(s.geminiKey)}`
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
-      }),
-    })
-    if (!res.ok) throw new Error(`Gemini lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`)
-    const data = await res.json()
-    const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || ''
-    return extractJson(text)
+    // Google quá tải (503) / hết lượt (429) / model không tồn tại (404): thử lại rồi chuyển model dự phòng
+    const models = [...new Set([s.geminiModel || 'gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'])]
+    let lastErr = null
+    for (const model of models) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(s.geminiKey)}`
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents: [{ role: 'user', parts: [{ text: user }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.7 },
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || ''
+          lastUsedModel = model
+          return extractJson(text)
+        }
+        lastErr = new Error(`Gemini lỗi ${res.status} (${model}): ${(await res.text()).slice(0, 160)}`)
+        if (res.status === 400 || res.status === 401 || res.status === 403) throw new Error(`Gemini lỗi ${res.status}: API key không hợp lệ hoặc chưa được bật. ${lastErr.message.slice(0, 120)}`)
+        if (res.status === 404) break // model không tồn tại → thử model khác
+        if (res.status === 503 && attempt === 0) { await new Promise((r) => setTimeout(r, 1200)); continue }
+        break
+      }
+    }
+    throw lastErr
   }
   if (s.aiProvider === 'openai' && s.openaiKey) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
