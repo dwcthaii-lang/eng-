@@ -6,7 +6,7 @@ const KEY = 'english-reflex:v1'
 export const defaultSettings = {
   aiProvider: 'none', // 'none' | 'gemini' | 'openai'
   geminiKey: '',
-  geminiModel: 'gemini-2.5-flash',
+  geminiModel: 'gemini-3.8-flash',
   openaiKey: '',
   openaiModel: 'gpt-4o-mini',
   voiceA: '', // tên giọng đọc nhân vật A

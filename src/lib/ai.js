@@ -16,13 +16,36 @@ function extractJson(text) {
 
 export let lastUsedModel = ''
 
+// Danh sách model Gemini dùng được với key này, ưu tiên bản "flash" mới nhất, ổn định
+export async function listGeminiModels(key, { all = false } = {}) {
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`)
+    if (!r.ok) return []
+    const d = await r.json()
+    const names = (d.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => String(m.name).replace(/^models\//, ''))
+      .filter((n) => (all ? /^gemini-[\d.]+-(flash|pro)/ : /^gemini-[\d.]+-flash/).test(n) && !/image|tts|audio|live|thinking|exp|embedding/.test(n))
+    const ver = (n) => parseFloat(n.match(/^gemini-([\d.]+)/)[1])
+    const rank = (n) => (/preview/.test(n) ? 2 : 0) + (/lite/.test(n) ? 1 : 0) + (/pro/.test(n) ? 0.5 : 0)
+    return names.sort((a, b) => rank(a) - rank(b) || ver(b) - ver(a)).slice(0, all ? 30 : 5)
+  } catch {
+    return []
+  }
+}
+
 export async function askJson(system, user) {
   const s = getState().settings
   if (s.aiProvider === 'gemini' && s.geminiKey) {
     // Google quá tải (503) / hết lượt (429) / model không tồn tại (404): thử lại rồi chuyển model dự phòng
-    const models = [...new Set([s.geminiModel || 'gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'])]
+    const models = [s.geminiModel || 'gemini-3.8-flash']
+    const tried = new Set()
+    let discovered = false
     let lastErr = null
-    for (const model of models) {
+    for (let mi = 0; mi < models.length && mi < 6; mi++) {
+      const model = models[mi]
+      if (tried.has(model)) continue
+      tried.add(model)
       for (let attempt = 0; attempt < 2; attempt++) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(s.geminiKey)}`
         const res = await fetch(url, {
@@ -42,9 +65,13 @@ export async function askJson(system, user) {
         }
         lastErr = new Error(`Gemini lỗi ${res.status} (${model}): ${(await res.text()).slice(0, 160)}`)
         if (res.status === 400 || res.status === 401 || res.status === 403) throw new Error(`Gemini lỗi ${res.status}: API key không hợp lệ hoặc chưa được bật. ${lastErr.message.slice(0, 120)}`)
-        if (res.status === 404) break // model không tồn tại → thử model khác
         if (res.status === 503 && attempt === 0) { await new Promise((r) => setTimeout(r, 1200)); continue }
         break
+      }
+      // Lấy danh sách model Google đang cho phép (model cũ có thể bị ngừng) và thử lần lượt
+      if (!discovered && mi === models.length - 1) {
+        discovered = true
+        models.push(...(await listGeminiModels(s.geminiKey)).filter((m) => !tried.has(m)))
       }
     }
     throw lastErr

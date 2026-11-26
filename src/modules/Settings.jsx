@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useStore, update, getState, replaceState, resetAll } from '../lib/store'
 import { useVoices, speak, sttSupported, ttsSupported } from '../lib/speech'
-import { testConnection, lastUsedModel } from '../lib/ai'
+import { testConnection, lastUsedModel, listGeminiModels } from '../lib/ai'
 import { PageHeader } from '../components/ui'
 
 function Field({ label, hint, children }) {
@@ -18,6 +18,8 @@ export default function Settings() {
   const s = useStore((x) => x.settings)
   const voices = useVoices()
   const [test, setTest] = useState('')
+  const [models, setModels] = useState([])
+  const [modelMsg, setModelMsg] = useState('')
   const fileRef = useRef()
   const set = (patch) => update((d) => Object.assign(d.settings, patch))
 
@@ -117,8 +119,19 @@ export default function Settings() {
             <Field label="Gemini API key" hint="Lấy miễn phí tại aistudio.google.com → Get API key">
               <input className="input" type="password" value={s.geminiKey} onChange={(e) => set({ geminiKey: e.target.value.trim() })} placeholder="AIza…" />
             </Field>
-            <Field label="Model" hint="vd: gemini-2.5-flash">
-              <input className="input" value={s.geminiModel} onChange={(e) => set({ geminiModel: e.target.value.trim() })} />
+            <Field label="Model" hint="Khuyên dùng: bản “flash” mới nhất (nhanh, gói miễn phí dùng thoải mái). “pro” thông minh hơn nhưng gói miễn phí rất ít lượt. Nếu model bận/ngừng, app tự chuyển model khác.">
+              <div className="flex gap-2">
+                {models.length ? (
+                  <select className="input" value={s.geminiModel} onChange={(e) => set({ geminiModel: e.target.value })}>
+                    {!models.includes(s.geminiModel) && <option value={s.geminiModel}>{s.geminiModel}</option>}
+                    {models.map((m) => <option key={m} value={m}>{m}{m === models[0] ? ' ⭐ khuyên dùng' : /pro/.test(m) ? ' (thông minh hơn, ít lượt miễn phí)' : /lite/.test(m) ? ' (nhanh, nhẹ)' : /preview/.test(m) ? ' (thử nghiệm)' : ''}</option>)}
+                  </select>
+                ) : (
+                  <input className="input" value={s.geminiModel} onChange={(e) => set({ geminiModel: e.target.value.trim() })} />
+                )}
+                <button className="btn-ghost shrink-0" disabled={!s.geminiKey} onClick={async () => { const l = await listGeminiModels(s.geminiKey, { all: true }); setModels(l); setModelMsg(l.length ? '' : 'Không lấy được danh sách model – kiểm tra lại key.') }}>📋 Chọn</button>
+              </div>
+              {modelMsg && <div className="text-xs text-rose-600">{modelMsg}</div>}
             </Field>
           </div>
         )}
