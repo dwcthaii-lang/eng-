@@ -260,7 +260,11 @@ function geminiStream({ system, user, json = false, onText, temperature = 0.5, m
     }
     const fail = () => { const e = new Error(exhaustedMessage(pairs, errs)); e.exhausted = true; end(reject, e) }
     const deadline = setTimeout(() => end(reject, lastErr && errs.length ? new Error(exhaustedMessage(pairs, errs)) : new Error(`AI không trả lời trong ${Math.round(maxMs / 1000)} giây.`)), maxMs)
-    const next = () => pairs.find((p) => !tried.has(p.id) && !dead.has(p.id) && !live.has(p.id) && usable(p, bg))
+    const next = () => {
+      const ok = pairs.filter((p) => !tried.has(p.id) && !dead.has(p.id) && !live.has(p.id) && usable(p, bg))
+      const busy = new Set([...live.values()].map((x) => x.model))
+      return ok.find((p) => !busy.has(p.model)) || ok[0] // gửi dự phòng sang MODEL KHÁC trước (quá tải thường theo model)
+    }
     const launch = (isHedge = false) => {
       if (finished || winner) return
       const p = next()
@@ -291,6 +295,15 @@ function geminiStream({ system, user, json = false, onText, temperature = 0.5, m
       })
       a.t0 = Date.now()
       live.set(p.id, a)
+      // Model treo (Google quá tải nhưng không báo lỗi): quá FIRST_MS chưa ra chữ nào → bỏ, chuyển cặp khác ngay
+      const FIRST_MS = bg ? 20000 : 10000
+      setTimeout(() => {
+        if (finished || winner || !live.has(p.id) || !next()) return
+        a.abort(); live.delete(p.id); recordSlow(p.model, Date.now() - a.t0)
+        pairs.forEach((x) => { if (x.model === p.model && !live.has(x.id)) dead.add(x.id) }) // quá tải là theo model, đổi key không giúp
+        errs.push(`${p.model}: quá chậm (>${FIRST_MS / 1000}s chưa trả lời)`)
+        launch()
+      }, FIRST_MS)
       a.promise.then(
         (text) => { if (p.id === winner) { lastUsedModel = p.model; end(resolve, text) } },
         (e) => {
@@ -307,6 +320,7 @@ function geminiStream({ system, user, json = false, onText, temperature = 0.5, m
           errs.push(`${p.model}: ${e.status === 404 ? 'không tồn tại với key này' : e.status === 429 ? (e.quota?.perDay ? 'hết lượt hôm nay' : 'hết lượt/phút') : e.status >= 500 ? 'Google đang quá tải' : String(e.message).slice(0, 60)}`)
           if (e.status !== 429) recordFail(p.model, e.status)
           if (!(e.status === 429 || e.status >= 500)) dead.add(p.id)
+          if (e.status >= 500) pairs.forEach((x) => { if (x.model === p.model && !live.has(x.id)) dead.add(x.id) })
           if (p.id === winner) return end(reject, e) // đã đang viết mà đứt giữa chừng
           launch() // lỗi → thử ngay cặp khác
         }

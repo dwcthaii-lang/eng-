@@ -5,6 +5,7 @@
 // → xếp lịch ôn lặp lại ngắt quãng (scheduleReview 'grammar'), hiện ở “Ôn tập hôm nay”.
 import { useState } from 'react'
 import { grammarLessons, irregularVerbs, tenseTable, tenseTree } from '../data/grammar'
+import { QUIZ_EXPLAIN, FIX_VI } from '../data/grammarExplain'
 import { getState, update, useStore, logHistory } from '../lib/store'
 import { scheduleReview, nextDueLabel, reviewOf, newStartedToday } from '../lib/review'
 import { chunkUsed, normalize, similarity, sameAnswer } from '../lib/text'
@@ -213,8 +214,11 @@ function ReviewLesson({ lesson }) {
 // ───────────────────────── Luyện tập 3 bậc ─────────────────────────
 function buildSteps(lesson, review) {
   const mix = review ? shuffle : (a) => a
-  const quiz = mix(lesson.quiz).map(([q, opts, why]) => ({ kind: 'quiz', q, answer: opts[0], opts: shuffle(opts), why }))
-  const fix = mix(lesson.mistakes).map(([wrong, right, why]) => ({ kind: 'fix', wrong, right, why }))
+  const quiz = mix(lesson.quiz).map(([q, opts, why]) => {
+    const ex = QUIZ_EXPLAIN[q]
+    return { kind: 'quiz', q, answer: opts[0], opts: shuffle(opts), why, vi: ex?.vi, optWhy: Object.fromEntries(opts.map((o, i) => [o, ex?.why?.[i]])) }
+  })
+  const fix = mix(lesson.mistakes).map(([wrong, right, why]) => ({ kind: 'fix', wrong, right, why, vi: FIX_VI[wrong] }))
   const say = mix(lesson.speak).map(([vi, model, must]) => ({ kind: 'speak', vi, model, must: must.split(';').map((x) => x.trim()).filter(Boolean) }))
   return [...quiz, ...fix, ...say]
 }
@@ -296,6 +300,7 @@ function Drill({ lesson, review = false, onExit }) {
 
 function QuizCard({ step, onDone }) {
   const [pick, setPick] = useState(null)
+  const showVi = useStore((x) => x.settings.showSentenceVi)
   const ok = pick === step.answer
   const full = step.q.replace('___', step.answer)
   const choose = (o) => { if (pick == null) { setPick(o); speak(step.q.replace('___', step.answer)) } }
@@ -305,7 +310,10 @@ function QuizCard({ step, onDone }) {
   useHotkeys(keys)
   return (
     <div className="card space-y-4">
-      <div className="text-lg font-medium">{step.q.split('___').map((p, i, arr) => <span key={i}>{p}{i < arr.length - 1 && <span className="mx-1 inline-block min-w-[3rem] border-b-2 border-indigo-400 text-center text-indigo-700">{pick ?? ''}</span>}</span>)}</div>
+      <div>
+        <div className="text-lg font-medium">{step.q.split('___').map((p, i, arr) => <span key={i}>{p}{i < arr.length - 1 && <span className="mx-1 inline-block min-w-[3rem] border-b-2 border-indigo-400 text-center text-indigo-700">{pick ?? ''}</span>}</span>)}</div>
+        {step.vi && showVi !== false && <div className="mt-1 text-sm text-slate-500">🇻🇳 {step.vi}</div>}
+      </div>
       <div className="grid gap-2 sm:grid-cols-3">
         {step.opts.map((o, i) => {
           const state = pick == null ? '' : o === step.answer ? 'border-emerald-400 bg-emerald-50' : o === pick ? 'border-rose-400 bg-rose-50' : 'opacity-50'
@@ -314,9 +322,22 @@ function QuizCard({ step, onDone }) {
       </div>
       {pick != null && (
         <div className={`rounded-xl p-3 text-sm ${ok ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
-          <div className="font-semibold">{ok ? '✅ Đúng!' : `❌ Đáp án: ${step.answer}`}</div>
+          <div className="font-semibold">{ok ? '✅ Đúng!' : `❌ Bạn chọn “${pick}” – đáp án đúng: ${step.answer}`}</div>
           <div>{full} <button onClick={() => speak(full)}>🔈</button></div>
-          <div className="mt-1 text-slate-700">💡 {step.why}</div>
+          {step.vi && <div className="text-slate-600">🇻🇳 {step.vi}</div>}
+          <div className="mt-1 text-slate-700">💡 Dấu hiệu: {step.why}</div>
+        </div>
+      )}
+      {pick != null && step.optWhy && Object.values(step.optWhy).some(Boolean) && (
+        <div className="space-y-2 text-sm">
+          <div className="label">Vì sao đúng, vì sao sai – từng lựa chọn</div>
+          {[step.answer, ...step.opts.filter((o) => o !== step.answer)].map((o) => (
+            <div key={o} className={`rounded-lg border p-2 ${o === step.answer ? 'border-emerald-300 bg-emerald-50/60' : o === pick ? 'border-rose-300 bg-rose-50/60' : 'border-slate-200'}`}>
+              <b className={o === step.answer ? 'text-emerald-700' : 'text-rose-700'}>{o === step.answer ? '✅' : '❌'} {o}</b>
+              {o === pick && <span className="ml-2 chip bg-slate-100 text-slate-600 !py-0 text-[11px]">bạn chọn</span>}
+              <div className="mt-0.5 text-slate-700">{step.optWhy[o] || (o === step.answer ? step.why : '')}</div>
+            </div>
+          ))}
         </div>
       )}
       {pick != null && <button className="btn-primary" onClick={() => onDone({ ok })}>Tiếp →</button>}
@@ -336,7 +357,7 @@ function FixCard({ step, onDone }) {
   return (
     <div className="card space-y-4">
       <div className="text-sm text-slate-500">Câu này SAI ngữ pháp. Hãy NÓI (hoặc gõ) lại cho đúng:</div>
-      <div className="rounded-xl bg-rose-50 p-4 text-lg text-rose-800">❌ {step.wrong}</div>
+      <div className="rounded-xl bg-rose-50 p-4 text-lg text-rose-800">❌ {step.wrong}{step.vi && <div className="mt-1 text-sm text-slate-500">🇻🇳 Ý muốn nói: {step.vi}</div>}</div>
       {!shown && (
         <>
           <MicButton mic={mic} label="Giữ để nói câu đúng" />
@@ -349,7 +370,7 @@ function FixCard({ step, onDone }) {
         <div className={`rounded-xl p-3 text-sm ${ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'}`}>
           {said != null && <div>Bạn: <i>{said}</i></div>}
           <div className="font-semibold">{ok ? '✅ Chính xác!' : '👉 Câu đúng:'} {step.right} <button onClick={() => speak(step.right)}>🔈</button></div>
-          <div className="mt-1 text-slate-700">💡 {step.why}</div>
+          <div className="mt-1 text-slate-700">💡 Vì sao: {step.why}</div>
           {!ok && <div className="mt-1 text-xs text-slate-500">Nghe lại và nói to câu đúng 1 lần trước khi sang câu tiếp.</div>}
         </div>
       )}
