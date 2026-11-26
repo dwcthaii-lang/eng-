@@ -30,3 +30,8 @@ export function applyFixes(text, matches) {
   })
   return out
 }
+
+// Lỗi "nhỏ": chỉ viết hoa / dấu câu / khoảng trắng – không ảnh hưởng ý
+const MINOR_CAT = new Set(['CASING', 'PUNCTUATION', 'TYPOGRAPHY', 'TYPOS_WHITESPACE'])
+const MINOR_RULE = /UPPERCASE|COMMA|WHITESPACE|QUOTES|I_LOWERCASE|PUNCT|EN_A_VS_AN_CAPS|SENTENCE_FRAGMENT/
+export function isMinorMatch(m) { return MINOR_CAT.has(m.category) || MINOR_RULE.test(m.rule || '') }

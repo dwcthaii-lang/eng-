@@ -16,13 +16,17 @@ function extractJson(text) {
 
 export let lastUsedModel = ''
 
-// ───────── Bộ định tuyến model Gemini: luôn chọn model ĐANG NHANH NHẤT ─────────
-// - Ghi lại thời gian ra chữ đầu tiên (TTFT) của từng model trên máy bạn → lần sau ưu tiên model nhanh
-// - "Gửi dự phòng" (hedging): sau HEDGE_MS chưa có chữ nào → gửi song song sang model kế tiếp, cái nào trả lời trước thì dùng
-// - Model lỗi/quá tải bị tạm gác 10 phút
+// ───────── Bộ định tuyến model Gemini ─────────
+// - Ghi lại thời gian ra chữ đầu tiên (TTFT) của từng model → ưu tiên model nhanh
+// - "Gửi dự phòng" (hedging) khi model đầu chậm – NHƯNG chỉ khi model kế còn dư lượt (không đốt quota)
+// - Hết lượt (429): đọc Google báo "thử lại sau bao lâu" + loại quota (theo phút / theo ngày) → khoá đúng model+key đó đến lúc hồi
+// - Tự giới hạn số yêu cầu/phút cho mỗi model (gói miễn phí ~10/phút) → hiếm khi bị 429
+// - Yêu cầu NỀN (dịch mượt, tra thêm) xếp hàng từng cái, chừa lượt cho việc bạn đang làm
+// - Nhiều key (khác project Google) → mỗi key có hạn mức riêng; hết sạch Gemini → dùng OpenAI nếu có key
 const STATS_KEY = 'english-reflex:aistats'
-const HEDGE_MS = 3500
-const MAX_PARALLEL = 3
+const QUOTA_KEY = 'english-reflex:quota'
+const HEDGE_MS = 4000
+const MAX_PARALLEL = 2
 let stats = {}
 try { stats = JSON.parse(localStorage.getItem(STATS_KEY) || '{}') } catch {}
 const saveStats = () => { try { localStorage.setItem(STATS_KEY, JSON.stringify(stats)) } catch {} }
@@ -32,6 +36,56 @@ function recordOk(model, ms) { const x = st(model); x.ttft = x.n ? Math.round(x.
 function recordSlow(model, ms) { const x = st(model); x.ttft = Math.max(x.ttft, ms); x.n = Math.max(1, x.n); saveStats() }
 function recordFail(model, status) { st(model).failAt = Date.now(); if (status === 404) st(model).gone = Date.now(); saveStats() }
 export function modelStats() { return stats }
+
+// Hạn mức theo từng cặp key+model
+let quota = {}
+try { quota = JSON.parse(localStorage.getItem(QUOTA_KEY) || '{}') } catch {}
+const saveQuota = () => { try { localStorage.setItem(QUOTA_KEY, JSON.stringify(quota)) } catch {} }
+const kid = (key) => String(key).slice(-6)
+const qid = (key, model) => `${kid(key)}|${model}`
+const reqLog = {} // qid -> [thời điểm gửi] trong 60 giây gần nhất (chỉ trong phiên)
+const softRpm = (model) => (/lite/.test(model) ? 14 : /pro/.test(model) ? 4 : 9)
+function usedLastMinute(id) { const now = Date.now(); const a = (reqLog[id] = (reqLog[id] || []).filter((t) => now - t < 60000)); return a.length }
+function blockedUntil(key, model) { const x = quota[qid(key, model)]; return x && x.until > Date.now() ? x : null }
+// thời điểm hạn mức NGÀY được làm mới (nửa đêm giờ Thái Bình Dương ≈ 15:00 giờ Việt Nam / 16:00 giờ Đài Loan)
+function nextPacificMidnight() {
+  const d = new Date(); const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 8))
+  if (t <= d) t.setUTCDate(t.getUTCDate() + 1)
+  return t.getTime()
+}
+// Đọc lỗi 429 của Google: theo ngày hay theo phút, và phải đợi bao lâu
+export function parseQuotaError(body) {
+  const perDay = /PerDay/i.test(body)
+  const m = body.match(/retryDelay"?\s*:\s*"?(\d+(?:\.\d+)?)s/) || body.match(/retry in (\d+(?:\.\d+)?)\s*s/i)
+  const delayMs = m ? Math.ceil(parseFloat(m[1]) * 1000) : 0
+  return { perDay, delayMs }
+}
+function noteBlock(key, model, status, body) {
+  const now = Date.now()
+  let until, why
+  if (status === 429) {
+    const { perDay, delayMs } = parseQuotaError(body)
+    if (perDay) { until = nextPacificMidnight(); why = 'day' }
+    else { until = now + (delayMs ? Math.max(delayMs, 2000) : 20000) + 500; why = 'minute' }
+  } else { until = now + 120000; why = 'busy' } // 503/500: tránh 2 phút
+  quota[qid(key, model)] = { until, why }
+  saveQuota()
+}
+const geminiKeys = (s) => [...new Set([s.geminiKey, ...String(s.geminiKeysExtra || '').split(/[\s,;]+/)].map((k) => (k || '').trim()).filter((k) => k.length > 8))]
+
+// Thông báo trạng thái AI cho giao diện (đang đợi hết lượt, đang dùng dự phòng…)
+let notice = null
+const noticeSubs = new Set()
+export function subscribeAiNotice(fn) { noticeSubs.add(fn); return () => noticeSubs.delete(fn) }
+export function getAiNotice() { return notice }
+function setNotice(n) { notice = n; noticeSubs.forEach((f) => f(n)) }
+
+// Tóm tắt tình trạng hạn mức (Cài đặt)
+export function quotaStatus() {
+  const now = Date.now()
+  return Object.entries(quota).filter(([, x]) => x.until > now).map(([id, x]) => ({ model: id.split('|')[1], key: '…' + id.split('|')[0], why: x.why, until: x.until }))
+}
+export function clearQuotaBlocks() { quota = {}; saveQuota(); Object.values(stats).forEach((x) => { x.failAt = 0 }); saveStats() }
 
 let modelListCache = null
 async function candidateModels(s) {
@@ -58,6 +112,32 @@ async function candidateModels(s) {
   return pool.sort((a, b) => score(a) - score(b))
 }
 
+// Danh sách cặp (key, model) theo thứ tự ưu tiên
+async function candidatePairs(s) {
+  const models = await candidateModels(s)
+  const keys = geminiKeys(s)
+  const out = []
+  models.forEach((model) => keys.forEach((key) => out.push({ key, model, id: qid(key, model) })))
+  return out
+}
+// Cặp còn dùng được ngay: không bị khoá, còn dư lượt/phút (yêu cầu nền chừa lại 4 lượt cho bạn)
+function usable(p, bg) {
+  if (blockedUntil(p.key, p.model)) return false
+  return usedLastMinute(p.id) < softRpm(p.model) - (bg ? 4 : 0)
+}
+// Bao lâu nữa thì có cặp dùng lại được (ms), hoặc Infinity nếu chỉ còn bị khoá theo ngày
+function soonestFree(pairs) {
+  const now = Date.now()
+  let best = Infinity
+  for (const p of pairs) {
+    const b = blockedUntil(p.key, p.model)
+    if (b) { if (b.why !== 'day') best = Math.min(best, b.until - now) ; continue }
+    const log = reqLog[p.id] || []
+    best = Math.min(best, log.length >= softRpm(p.model) ? 60000 - (now - log[0]) + 200 : 0)
+  }
+  return best
+}
+
 // Tắt/giảm "suy nghĩ" để có chữ đầu tiên nhanh (thử lần lượt, model không nhận thì bỏ; nhớ lại lựa chọn)
 function thinkingOptions(model) {
   const v = parseFloat((model.match(/^gemini-([\d.]+)/) || [])[1] || '0')
@@ -70,11 +150,13 @@ function thinkingOptions(model) {
 function attemptModel({ model, key, system, user, json, temperature, onFirst, onText }) {
   const ctrl = new AbortController()
   const t0 = Date.now()
+  const id = qid(key, model)
   const run = async () => {
     const opts = thinkingOptions(model)
     for (let tries = 0; tries < 4; tries++) {
       if (ctrl.signal.aborted) throw new Error('aborted')
       const think = opts[Math.min(st(model).think || 0, opts.length - 1)]
+      usedLastMinute(id); (reqLog[id] ||= []).push(Date.now())
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -86,10 +168,12 @@ function attemptModel({ model, key, system, user, json, temperature, onFirst, on
         }),
       })
       if (!res.ok) {
-        const body = (await res.text()).slice(0, 300)
+        const body = (await res.text()).slice(0, 3000)
         if (res.status === 400 && think && /think/i.test(body)) { st(model).think = (st(model).think || 0) + 1; saveStats(); continue }
         const err = new Error(`Gemini lỗi ${res.status} (${model}): ${body.slice(0, 140)}`)
         err.status = res.status
+        if (res.status === 429) err.quota = parseQuotaError(body)
+        if (res.status === 429 || res.status >= 500) noteBlock(key, model, res.status, body)
         if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key|API_KEY/i.test(body))) err.fatal = true
         throw err
       }
@@ -110,8 +194,8 @@ function attemptModel({ model, key, system, user, json, temperature, onFirst, on
             const t = (d.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought && p.text).map((p) => p.text).join('')
             if (t) {
               text += t
-              if (!got) { got = true; recordOk(model, Date.now() - t0); if (!onFirst(model)) { ctrl.abort(); throw new Error('aborted') } }
-              onText(model, text)
+              if (!got) { got = true; recordOk(model, Date.now() - t0); if (!onFirst(id)) { ctrl.abort(); throw new Error('aborted') } }
+              onText(id, text)
             }
           } catch (e) { if (e.message === 'aborted') throw e }
         }
@@ -121,56 +205,99 @@ function attemptModel({ model, key, system, user, json, temperature, onFirst, on
     }
     throw new Error(`Model ${model} không nhận cấu hình.`)
   }
-  return { model, abort: () => ctrl.abort(), promise: run().catch((e) => { throw ctrl.signal.aborted ? new Error('aborted') : e }) }
+  return { model, id, abort: () => ctrl.abort(), promise: run().catch((e) => { throw ctrl.signal.aborted ? new Error('aborted') : e }) }
 }
 
-// Gọi Gemini: chọn model nhanh nhất, gửi dự phòng song song khi chậm, trả về toàn bộ văn bản
-function geminiStream({ system, user, json = false, onText, temperature = 0.5, maxMs = 60000 }) {
+const secs = (ms) => (ms >= 3600000 ? `${Math.floor(ms / 3600000)} giờ ${Math.round((ms % 3600000) / 60000)} phút` : ms >= 60000 ? `${Math.round(ms / 60000)} phút` : `${Math.ceil(ms / 1000)} giây`)
+function exhaustedMessage(pairs, errs) {
+  const day = pairs.length && pairs.every((p) => blockedUntil(p.key, p.model)?.why === 'day')
+  const wait = soonestFree(pairs)
+  const head = day
+    ? `Đã dùng hết lượt AI miễn phí của HÔM NAY (mọi model). Lượt mới có lại sau khoảng ${secs(nextPacificMidnight() - Date.now())}.`
+    : wait < Infinity ? `AI đang hết lượt/quá tải tạm thời – thử lại sau khoảng ${secs(Math.max(wait, 1000))}.` : 'Chưa có model AI nào trả lời được.'
+  return `${head} Cách khắc phục: thêm key Gemini dự phòng (tạo ở project Google khác) hoặc key OpenAI trong Cài đặt → AI.${errs.length ? ` (Chi tiết: ${errs.slice(0, 4).join('; ')})` : ''}`
+}
+
+// Gọi Gemini: chọn model nhanh nhất còn lượt, gửi dự phòng khi chậm, tự đợi khi chỉ hết lượt theo phút
+function geminiStream({ system, user, json = false, onText, temperature = 0.5, maxMs = 60000, bg = false }) {
   const s = getState().settings
   return new Promise(async (resolve, reject) => {
-    const queue = await candidateModels(s)
+    const pairs = await candidatePairs(s)
+    const tried = new Set()
+    const dead = new Set() // lỗi không phải do hết lượt/quá tải → không thử lại trong lần này
     const live = new Map()
-    let winner = null, finished = false, lastErr = null, hedgeTimer = null
+    let winner = null, finished = false, lastErr = null, hedgeTimer = null, waitTimer = null
     const errs = []
     const t0 = Date.now()
-    const end = (fn, v) => { if (finished) return; finished = true; clearTimeout(hedgeTimer); clearTimeout(deadline); live.forEach((a) => a.abort()); fn(v) }
-    const deadline = setTimeout(() => end(reject, lastErr || new Error(`AI không trả lời trong ${Math.round(maxMs / 1000)} giây.`)), maxMs)
-    const launch = () => {
+    const end = (fn, v) => {
+      if (finished) return
+      finished = true
+      clearTimeout(hedgeTimer); clearTimeout(deadline); clearTimeout(waitTimer)
+      live.forEach((a) => a.abort())
+      if (!bg && notice?.kind === 'wait') setNotice(null)
+      fn(v)
+    }
+    const fail = () => { const e = new Error(exhaustedMessage(pairs, errs)); e.exhausted = true; end(reject, e) }
+    const deadline = setTimeout(() => end(reject, lastErr && errs.length ? new Error(exhaustedMessage(pairs, errs)) : new Error(`AI không trả lời trong ${Math.round(maxMs / 1000)} giây.`)), maxMs)
+    const next = () => pairs.find((p) => !tried.has(p.id) && !dead.has(p.id) && !live.has(p.id) && usable(p, bg))
+    const launch = (isHedge = false) => {
       if (finished || winner) return
-      const model = queue.shift()
-      if (!model) { if (!live.size) end(reject, new Error(errs.length ? `Chưa có model nào trả lời được – ${errs.join('; ')}` : 'Không có model AI nào dùng được.')); return }
+      const p = next()
+      if (!p) {
+        if (isHedge || live.size) return
+        // Hết cặp dùng được ngay: nếu chỉ phải đợi ngắn (hết lượt theo phút) → tự đợi rồi thử lại
+        const wait = soonestFree(pairs.filter((x) => !dead.has(x.id)))
+        const left = maxMs - (Date.now() - t0) - 8000
+        if (!bg && wait < Infinity && wait <= Math.min(left, 65000)) {
+          setNotice({ kind: 'wait', until: Date.now() + wait, msg: 'AI hết lượt theo phút – đang tự đợi rồi gửi lại' })
+          tried.clear()
+          waitTimer = setTimeout(() => { if (notice?.kind === 'wait') setNotice(null); launch() }, Math.max(wait, 500))
+          return
+        }
+        return fail()
+      }
+      tried.add(p.id)
       const a = attemptModel({
-        model, key: s.geminiKey, system, user, json, temperature,
-        onFirst: (m) => {
-          if (winner && winner !== m) return false
-          winner = m
+        model: p.model, key: p.key, system, user, json, temperature,
+        onFirst: (id) => {
+          if (winner && winner !== id) return false
+          winner = id
           clearTimeout(hedgeTimer)
-          live.forEach((x, k) => { if (k !== m) { x.abort(); live.delete(k); recordSlow(k, Date.now() - x.t0) } })
+          live.forEach((x, k) => { if (k !== id) { x.abort(); live.delete(k); recordSlow(x.model, Date.now() - x.t0) } })
           return true
         },
-        onText: (m, t) => { if (m === winner) onText?.(t) },
+        onText: (id, t) => { if (id === winner) onText?.(t) },
       })
       a.t0 = Date.now()
-      live.set(model, a)
+      live.set(p.id, a)
       a.promise.then(
-        (text) => { if (model === winner) { lastUsedModel = model; end(resolve, text) } },
+        (text) => { if (p.id === winner) { lastUsedModel = p.model; end(resolve, text) } },
         (e) => {
-          live.delete(model)
+          live.delete(p.id)
           if (finished || e.message === 'aborted') return
           if (e.fatal) return end(reject, new Error('Gemini: API key không hợp lệ hoặc chưa được bật.'))
           lastErr = e
-          errs.push(`${model}: ${e.status === 404 ? 'không tồn tại với key này' : e.status === 429 ? 'hết lượt miễn phí (đợi 1 phút)' : e.status === 503 ? 'Google đang quá tải' : String(e.message).slice(0, 60)}`)
-          recordFail(model, e.status)
-          if (model === winner) return end(reject, e) // đã đang viết mà đứt giữa chừng
-          launch() // lỗi → thử ngay model khác
+          errs.push(`${p.model}: ${e.status === 404 ? 'không tồn tại với key này' : e.status === 429 ? (e.quota?.perDay ? 'hết lượt hôm nay' : 'hết lượt/phút') : e.status >= 500 ? 'Google đang quá tải' : String(e.message).slice(0, 60)}`)
+          if (e.status !== 429) recordFail(p.model, e.status)
+          if (!(e.status === 429 || e.status >= 500)) dead.add(p.id)
+          if (p.id === winner) return end(reject, e) // đã đang viết mà đứt giữa chừng
+          launch() // lỗi → thử ngay cặp khác
         }
       )
-      // chưa có chữ sau HEDGE_MS → gửi thêm 1 model song song
+      // chưa có chữ sau HEDGE_MS → gửi thêm 1 model song song (chỉ yêu cầu chính, không phải nền)
       clearTimeout(hedgeTimer)
-      hedgeTimer = setTimeout(() => { if (!winner && live.size < MAX_PARALLEL && Date.now() - t0 < maxMs) launch() }, HEDGE_MS)
+      if (!bg) hedgeTimer = setTimeout(() => { if (!winner && live.size < MAX_PARALLEL && Date.now() - t0 < maxMs) launch(true) }, HEDGE_MS)
     }
     launch()
   })
+}
+
+// Yêu cầu NỀN: chạy lần lượt từng cái (không tranh lượt với việc bạn đang làm)
+let bgChain = Promise.resolve()
+function runBg(fn) {
+  const p = bgChain.then(fn, fn)
+  bgChain = p.then(() => {}, () => {})
+  return p
 }
 
 // Đo tốc độ từng model (Cài đặt)
@@ -188,15 +315,15 @@ export async function benchmarkModels(onRow) {
       })
       rows.push({ model, ms: Date.now() - t0 })
     } catch (e) {
-      recordFail(model)
-      rows.push({ model, error: String(e.message || e).slice(0, 80) })
+      if (e.status !== 429) recordFail(model, e.status)
+      rows.push({ model, error: e.status === 429 ? (e.quota?.perDay ? 'hết lượt hôm nay' : 'hết lượt/phút – đợi chút') : String(e.message || e).slice(0, 80) })
     }
     onRow?.([...rows])
   }
   return rows
 }
 
-// Danh sách model Gemini dùng được với key này, ưu tiên bản "flash" mới nhất, ổn định
+// Danh sách model Gemini dùng được với key này, ưu tiên bản "flash" mới nhất, ổn định (gồm cả bản lite – hạn mức riêng)
 export async function listGeminiModels(key, { all = false } = {}) {
   try {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`)
@@ -208,54 +335,57 @@ export async function listGeminiModels(key, { all = false } = {}) {
       .filter((n) => (all ? /^gemini-[\d.]+-(flash|pro)/ : /^gemini-[\d.]+-flash/).test(n) && !/image|tts|audio|live|thinking|exp|embedding/.test(n))
     const ver = (n) => parseFloat(n.match(/^gemini-([\d.]+)/)[1])
     const rank = (n) => (/preview/.test(n) ? 2 : 0) + (/lite/.test(n) ? 1 : 0) + (/pro/.test(n) ? 0.5 : 0)
-    return names.sort((a, b) => rank(a) - rank(b) || ver(b) - ver(a)).slice(0, all ? 30 : 5)
+    return names.sort((a, b) => rank(a) - rank(b) || ver(b) - ver(a)).slice(0, all ? 30 : 8)
   } catch {
     return []
   }
 }
 
-// Văn bản tự do (có stream nếu dùng Gemini)
-export async function askText(system, user, onText, { maxMs = 60000 } = {}) {
+async function openaiCall({ system, user, json, temperature }) {
   const s = getState().settings
-  if (s.aiProvider === 'gemini' && s.geminiKey) return geminiStream({ system, user, onText, temperature: 0.3, maxMs })
-  if (s.aiProvider === 'openai' && s.openaiKey) {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.openaiKey}` },
-      signal: AbortSignal.timeout?.(60000),
-      body: JSON.stringify({ model: s.openaiModel || 'gpt-4o-mini', temperature: 0.3, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
-    })
-    if (!res.ok) throw new Error(`OpenAI lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`)
-    const text = (await res.json()).choices?.[0]?.message?.content || ''
-    onText?.(text)
-    return text
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.openaiKey}` },
+    signal: AbortSignal.timeout?.(60000),
+    body: JSON.stringify({
+      model: s.openaiModel || 'gpt-4o-mini',
+      temperature,
+      ...(json ? { response_format: { type: 'json_object' } } : {}),
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+    }),
+  })
+  if (!res.ok) throw new Error(`OpenAI lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  return (await res.json()).choices?.[0]?.message?.content || ''
+}
+
+// Gọi AI chung: Gemini (nhiều key, nhiều model) → hết lượt thì OpenAI (nếu có key)
+async function callAI({ system, user, json, temperature, onText, maxMs, bg }) {
+  const s = getState().settings
+  if (s.aiProvider === 'openai' && s.openaiKey) { const t = await openaiCall({ system, user, json, temperature }); onText?.(t); return t }
+  if (s.aiProvider === 'gemini' && s.geminiKey) {
+    const go = () => geminiStream({ system, user, json, onText, temperature, maxMs, bg })
+    try {
+      return await (bg ? runBg(go) : go())
+    } catch (e) {
+      if (!bg && s.openaiKey && !/aborted/.test(e.message)) {
+        setNotice({ kind: 'info', msg: 'Gemini hết lượt/quá tải → đang dùng OpenAI dự phòng', until: Date.now() + 6000 })
+        const t = await openaiCall({ system, user, json, temperature })
+        onText?.(t)
+        return t
+      }
+      throw e
+    }
   }
   throw new Error('Chưa cấu hình API key trong Cài đặt')
 }
 
-export async function askJson(system, user, { maxMs = 60000 } = {}) {
-  const s = getState().settings
-  if (s.aiProvider === 'gemini' && s.geminiKey) return extractJson(await geminiStream({ system, user, json: true, temperature: 0.7, maxMs }))
-  if (s.aiProvider === 'openai' && s.openaiKey) {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.openaiKey}` },
-      signal: AbortSignal.timeout?.(60000),
-      body: JSON.stringify({
-        model: s.openaiModel || 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        temperature: 0.7,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-      }),
-    })
-    if (!res.ok) throw new Error(`OpenAI lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`)
-    const data = await res.json()
-    return extractJson(data.choices?.[0]?.message?.content || '')
-  }
-  throw new Error('Chưa cấu hình API key trong Cài đặt')
+// Văn bản tự do (có stream nếu dùng Gemini)
+export function askText(system, user, onText, { maxMs = 60000, bg = false } = {}) {
+  return callAI({ system, user, json: false, temperature: 0.3, onText, maxMs, bg })
+}
+
+export async function askJson(system, user, { maxMs = 60000, bg = false, temperature = 0.7, onText } = {}) {
+  return extractJson(await callAI({ system, user, json: true, temperature, onText, maxMs, bg }))
 }
 
 const LEARNER = 'The learner is a Vietnamese master\'s student in semiconductor engineering living in an international dorm in Taiwan. Good reading vocabulary, weak speaking reflexes. Speech comes from browser speech recognition, so ignore punctuation/capitalization and small recognition errors.'
@@ -302,27 +432,84 @@ Review EVERY learner line below, in order (judge grammar, word choice, naturalne
 ${JSON.stringify(lines)}
 
 Return JSON:
-{"turns":[{"said":"learner line exactly","score":0-10,"verdict_vi":"1 câu: câu này trả lời đúng ý/đúng ngữ cảnh chưa, vấn đề lớn nhất","errors":[{"wrong":"exact words from the line","fix":"correction","type":"grammar|word|usage|unnatural|missing","why_vi":"giải thích ngắn gọn nhưng cụ thể"}],"fixed":"the learner's OWN sentence corrected — keep their idea and wording, only fix what is wrong","better":"how a native speaker would naturally say it here","why_vi":"vì sao cách nói 'better' hay hơn"}],
+{"turns":[{"said":"learner line exactly","score":0-10,"verdict_vi":"1 câu: câu này trả lời đúng ý/đúng ngữ cảnh chưa, vấn đề lớn nhất","errors":[{"wrong":"exact words from the line","fix":"correction","type":"grammar|word|usage|unnatural|missing","why_vi":"giải thích ngắn gọn nhưng cụ thể"}],"fixed":"the learner's OWN sentence with ALL listed errors corrected — keep their idea and wording; never just copy it if errors exist","better":"how a native speaker would naturally say it here","why_vi":"vì sao cách nói 'better' hay hơn"}],
  "reactivate":[{"en":"useful chunk the learner lacked","vi":"nghĩa"}],
  "summary_vi":"2 câu: điểm mạnh + điều quan trọng nhất cần cải thiện"}`,
-    { maxMs: 60000 }
-  )
+    { maxMs: 60000, temperature: 0.3 }
+  ).then((r) => {
+    ;(r.turns || []).forEach((t) => { if (t && (!t.fixed || sameText(t.fixed, t.said)) && t.errors?.length) t.fixed = applyErrorList(t.said || '', t.errors) })
+    return r
+  })
 }
 
-// Đọc/Viết: sửa nhật ký
-export function gradeWriting({ promptEn, text, chunks }) {
-  return askJson(
-    `You are an English writing coach for academic and daily English. ${LEARNER} Return JSON only.`,
-    `Task: ${promptEn}\nTarget chunks: ${chunks.join('; ')}\nLearner text:\n${text}\n\nReturn JSON: {"corrected": "corrected full text, minimal edits", "top_fixes": [{"from":"...","to":"...","why_vi":"..."}] (max 3), "feedback_vi": "1-2 sentences in Vietnamese"}`
-  )
+// Quy tắc chấm chung cho bài VIẾT/DỊCH: chấm theo Ý, không theo từ khoá; bản sửa phải sửa THẬT
+const MEANING_RULES = `GRADING PRINCIPLES (very important):
+- Judge whether the learner CONVEYS THE FULL MEANING, idea by idea — NOT whether they used particular keywords. Using the "right" keywords inside a wrong/unclear sentence earns nothing; a different wording that conveys the idea correctly is fully correct.
+- Split the source into its separate ideas/facts (who, what, when, why, conditions, nuance). For each, decide: ok (fully and accurately conveyed), partial (vague, nuance lost, or ambiguous), wrong (says something different), missing.
+- Be strict like an IELTS examiner. Do not praise generically.
+- "fixed" = the learner's OWN text with EVERY error corrected (grammar, wrong word, collocation, article, tense, preposition, unclear meaning, missing idea added back) — keep their structure where it is correct. It must NOT simply copy the learner's text unless it is genuinely error-free.
+- "native" = how a fluent native speaker would naturally write it — rewrite freely for clarity and naturalness; it must read clearly better than the learner's text.
+- List EVERY real error in "errors" (up to 10), most serious first. Ignore pure capitalization/punctuation slips unless they change meaning.
+- Explanations in Vietnamese, concrete: name the rule/collocation, why it is wrong or unnatural, and the correct form.`
+
+const IDEA_SCHEMA = `"ideas": [{"idea_vi":"một ý trong bản gốc (tiếng Việt, ngắn)","status":"ok|partial|wrong|missing","learner":"phần người học viết cho ý này (copy nguyên văn, rỗng nếu thiếu)","note_vi":"vì sao chưa đạt / cần diễn đạt thế nào"}]`
+const ERR_SCHEMA = `"errors": [{"wrong":"exact words copied from the learner's text","fix":"correction","type":"grammar|word|collocation|meaning|unnatural|missing","why_vi":"giải thích cụ thể"}]`
+
+// Sửa câu theo danh sách lỗi (khi AI lười chép lại nguyên câu)
+function applyErrorList(text, errors = []) {
+  let out = text
+  errors.forEach((e) => { if (e.wrong && e.fix && out.includes(e.wrong)) out = out.replace(e.wrong, e.fix) })
+  return out
+}
+const sameText = (a, b) => String(a || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() === String(b || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+function normalizeGrade(r, text) {
+  r.errors = Array.isArray(r.errors) ? r.errors.filter((e) => e && (e.wrong || e.fix)) : []
+  r.ideas = Array.isArray(r.ideas) ? r.ideas : []
+  if ((!r.fixed || sameText(r.fixed, text)) && r.errors.length) r.fixed = applyErrorList(text, r.errors)
+  if (r.ideas.length) {
+    const w = { ok: 1, partial: 0.5, wrong: 0, missing: 0 }
+    const cov = r.ideas.reduce((a, i) => a + (w[i.status] ?? 0), 0) / r.ideas.length
+    r.coverage = Math.round(cov * 100)
+    if (r.meaning_score == null) r.meaning_score = Math.round(cov * 10)
+    // điểm tổng không được cao hơn mức truyền đạt ý cho phép
+    if (r.score != null) r.score = Math.min(r.score, Math.round(cov * 10) + 1)
+  }
+  // tương thích giao diện cũ
+  r.corrected = r.fixed
+  return r
 }
 
-// Module 2: chấm tóm tắt ý chính (nghe không phụ đề)
-export function gradeSummary({ transcript, summary }) {
-  return askJson(
-    `You check listening comprehension. Return JSON only.`,
-    `Dialogue transcript:\n${transcript}\n\nLearner's summary (may be Vietnamese or English): "${summary}"\nReturn JSON: {"score": 0-10, "caught": ["main points the learner got"], "missed": ["main points missed, in Vietnamese"], "feedback_vi": "1 short sentence in Vietnamese"}`
+// Đọc/Viết: sửa nhật ký – chấm theo ý + sửa thật + bản tự nhiên
+export async function gradeWriting({ promptEn, text, chunks }) {
+  const r = await askJson(
+    `You are a strict, expert English writing teacher for Vietnamese learners. ${LEARNER} ${MEANING_RULES} Return JSON only.`,
+    `Task / prompt: ${promptEn}
+Suggested chunks (optional, do NOT grade on whether they appear): ${chunks.join('; ')}
+Learner text:
+${text}
+
+Return JSON:
+{"score": 0-10, "task_score": 0-10, "grammar_score": 0-10, "natural_score": 0-10,
+ "verdict_vi": "1-2 câu: bài viết có trả lời đúng đề không, người đọc hiểu thế nào, vấn đề lớn nhất",
+ ${ERR_SCHEMA},
+ "fixed": "the learner's full text with every error corrected",
+ "native": "native-like rewrite of the whole text",
+ "native_why_vi": "vì sao bản native hay hơn (2-3 điểm cụ thể)",
+ "top_fixes": [{"from":"...","to":"...","why_vi":"..."}] (3 most important),
+ "feedback_vi": "1-2 câu: điểm mạnh + việc cần làm nhất"}`,
+    { maxMs: 60000, temperature: 0.3 }
   )
+  return normalizeGrade(r, text)
+}
+
+// Module 2: chấm tóm tắt ý chính (nghe không phụ đề) – theo từng ý
+export function gradeSummary({ transcript, summary, keyPoints = [] }) {
+  return askJson(
+    `You check listening comprehension. Judge by IDEAS understood, not by matching words; the summary may be in Vietnamese or English. Be strict: vague or wrong understanding is not "caught". Return JSON only.`,
+    `Dialogue transcript:\n${transcript}\n${keyPoints.length ? `Main ideas to check (use exactly these as "ideas", in order): ${JSON.stringify(keyPoints)}\n` : ''}\nLearner's summary: "${summary}"
+Return JSON: {"score": 0-10, ${IDEA_SCHEMA.replace('trong bản gốc', 'chính của đoạn hội thoại')}, "caught": ["main points the learner got right, in Vietnamese"], "missed": ["main points missed or misunderstood, in Vietnamese"], "feedback_vi": "1-2 câu tiếng Việt"}`,
+    { maxMs: 45000, temperature: 0.3 }
+  ).then((r) => normalizeGrade(r, summary))
 }
 
 export async function testConnection() {
@@ -339,22 +526,33 @@ Return JSON: {"syn": ["1-3 synonyms or near-synonym chunks"], "ant": ["0-2 oppos
   )
 }
 
-// Chấm bản dịch Việt -> Anh: sửa ngữ pháp + từ vựng
-export function gradeTranslation({ vi, reference, text }) {
-  return askJson(
-    `You are an English writing coach. ${LEARNER} Return JSON only.`,
-    `Vietnamese source:\n${vi}\n\nReference translation (one possible answer):\n${reference}\n\nLearner's translation:\n${text}
+// Chấm bản dịch Việt -> Anh: theo Ý cả đoạn + bản sửa theo ý bạn + bản tự nhiên
+export async function gradeTranslation({ vi, reference, text }) {
+  const r = await askJson(
+    `You are a strict, expert Vietnamese→English translation teacher. ${LEARNER} ${MEANING_RULES} Return JSON only.`,
+    `Vietnamese source:\n${vi}\n\nReference translation (only ONE possible answer — other wordings are fine if the meaning is right):\n${reference}\n\nLearner's translation:\n${text}
 
-Evaluate meaning accuracy, grammar and natural word choice. Keep the learner's structure where it is correct. Return JSON:
-{"score": 0-10, "corrected": "the learner's text with minimal corrections", "grammar": [{"from":"...","to":"...","why_vi":"..."}] (max 4), "vocab": [{"from":"...","to":"more natural word/chunk","why_vi":"..."}] (max 4), "missing_vi": "ideas from the source the learner left out, in Vietnamese, or empty", "feedback_vi": "1-2 sentences in Vietnamese"}`
+Return JSON:
+{"meaning_score": 0-10 (how completely and accurately ALL ideas are conveyed), "grammar_score": 0-10, "natural_score": 0-10,
+ "score": 0-10 (overall; meaning matters most),
+ "verdict_vi": "1-2 câu: người đọc bản dịch sẽ hiểu đúng bao nhiêu phần ý gốc, vấn đề lớn nhất",
+ ${IDEA_SCHEMA},
+ ${ERR_SCHEMA},
+ "fixed": "the learner's translation with every error corrected and missing ideas added, keeping their structure",
+ "native": "how a fluent native speaker would translate the source",
+ "native_why_vi": "vì sao bản native hay hơn (2-3 điểm cụ thể)",
+ "feedback_vi": "1-2 câu: điểm mạnh + việc cần làm nhất lần sau"}`,
+    { maxMs: 60000, temperature: 0.3 }
   )
+  return normalizeGrade(r, text)
 }
 
 // Tra nhanh khi viết: tiếng Việt -> cách nói tiếng Anh tự nhiên
 export function lookupPhrase({ phrase, context }) {
   return askJson(
-    `You are a bilingual Vietnamese-English dictionary for spoken and academic English. Return JSON only.`,
-    `Vietnamese word/phrase: "${phrase}"\nContext sentence: "${context || ''}"\nReturn JSON: {"options": [{"en": "natural English word/chunk", "note_vi": "khi nào dùng, ngắn gọn"}] (2-3 options), "example": "one example sentence in English"}`
+    `You are a bilingual Vietnamese-English dictionary for spoken and academic English (lab/semiconductor + daily life). Return JSON only.`,
+    `Vietnamese word/phrase: "${phrase}"\nContext (may be empty): "${(context || '').slice(0, 400)}"\nReturn JSON: {"options": [{"en": "natural English word/chunk", "note_vi": "khi nào dùng, sắc thái, ngắn gọn"}] (2-4 options, best for this context first), "example": "one example sentence in English using the best option", "example_vi": "dịch câu ví dụ"}`,
+    { maxMs: 20000, temperature: 0.3 }
   )
 }
 
@@ -416,14 +614,18 @@ NATIVE: <how a native speaker would naturally say it in this situation>
 NATIVE_VI: <dịch NATIVE sang tiếng Việt>
 AVOID: <1 thói quen/cách nói nên tránh, có lý do>
 TIP: <1 mẹo cụ thể để lần sau nói tốt hơn>
-Rules: SCORE first. ERR lines ordered by importance (0-5 lines; write none if the sentence is truly fine). One CHUNK line per target chunk.
+Rules: judge whether the sentence gets the whole IDEA across (not keyword matching). If you list any ERR line, FIXED must apply ALL those corrections — never just copy the learner's sentence. SCORE first. ERR lines ordered by importance (0-5 lines; write none if the sentence is truly fine). One CHUNK line per target chunk.
 Scoring: 9-10 = grammatical, natural AND fully does the task. Chunks used incorrectly/unnaturally or a fragmented sentence → max 6. Task not achieved → max 5. Ignore punctuation/capitalization (speech recognition).`
   const user = `Situation (Vietnamese): ${situationVi}
 Context: ${context}
 Target chunks: ${chunks.join('; ')}
 Reference answer: ${model}
 Learner said: "${transcript}"`
-  return askText(system, user, (t) => onPartial?.(parseReview(t)), { maxMs: 45000 }).then(parseReview)
+  return askText(system, user, (t) => onPartial?.(parseReview(t)), { maxMs: 45000 }).then((t) => {
+    const r = parseReview(t)
+    if ((!r.corrected || sameText(r.corrected, transcript)) && r.errors.length) r.corrected = applyErrorList(transcript, r.errors)
+    return r
+  })
 }
 
 const num = (x) => { const n = parseFloat(x); return Number.isFinite(n) ? Math.max(0, Math.min(10, Math.round(n))) : undefined }

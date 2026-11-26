@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useStore, update, getState, replaceState, resetAll } from '../lib/store'
 import { useVoices, speak, sttSupported, ttsSupported } from '../lib/speech'
-import { testConnection, lastUsedModel, listGeminiModels, benchmarkModels } from '../lib/ai'
+import { testConnection, lastUsedModel, listGeminiModels, benchmarkModels, quotaStatus, clearQuotaBlocks } from '../lib/ai'
 import { PageHeader } from '../components/ui'
 
 function Field({ label, hint, children }) {
@@ -62,7 +62,7 @@ export default function Settings() {
   }
 
   const exportData = () => {
-    const data = { ...getState(), settings: { ...getState().settings, geminiKey: '', openaiKey: '' } }
+    const data = { ...getState(), settings: { ...getState().settings, geminiKey: '', geminiKeysExtra: '', openaiKey: '' } }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -75,7 +75,7 @@ export default function Settings() {
     try {
       const data = JSON.parse(await f.text())
       const keep = getState().settings
-      replaceState({ ...data, settings: { ...data.settings, geminiKey: keep.geminiKey, openaiKey: keep.openaiKey } })
+      replaceState({ ...data, settings: { ...data.settings, geminiKey: keep.geminiKey, geminiKeysExtra: keep.geminiKeysExtra || '', openaiKey: keep.openaiKey } })
       alert('Đã nhập dữ liệu!')
     } catch {
       alert('File không hợp lệ')
@@ -145,6 +145,7 @@ export default function Settings() {
                 </div>
               )}
             </div>
+            <QuotaPanel s={s} set={set} />
           </div>
         )}
         {s.aiProvider === 'openai' && (
@@ -237,6 +238,39 @@ export default function Settings() {
       <div className="card text-sm space-y-1">
         <div className="label mb-1">Phím tắt</div>
         <div><span className="kbd">Space</span> (giữ) nói · <span className="kbd">Ctrl</span> nghe lại (nhấn rồi thả riêng phím Ctrl – dùng được cả khi đang gõ) · <span className="kbd">H</span> gợi ý · <span className="kbd">Enter</span> tiếp tục · <span className="kbd">T</span> hiện/ẩn chữ (nhập vai) · <span className="kbd">S</span> shadow câu đang chọn</div>
+      </div>
+    </div>
+  )
+}
+
+// Khi AI hết lượt / quá tải: key dự phòng + tình trạng hạn mức
+function QuotaPanel({ s, set }) {
+  const [, force] = useState(0)
+  const q = quotaStatus()
+  const fmt = (t) => new Date(t).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+  return (
+    <div className="sm:col-span-2 space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+      <div className="text-sm font-semibold">🛟 Khi AI hết lượt / quá tải</div>
+      <ul className="list-disc pl-5 text-xs text-slate-600 space-y-1">
+        <li>App tự đọc thông báo của Google: hết lượt <b>theo phút</b> → tự đợi vài giây rồi gửi lại; hết lượt <b>theo ngày</b> → tạm bỏ model đó tới khi Google làm mới (khoảng 15–16 giờ chiều giờ VN/Đài Loan) và chuyển sang model khác (mỗi model, kể cả bản “lite”, có hạn mức riêng).</li>
+        <li>Dịch mượt tự động chạy nền từng yêu cầu một và luôn chừa lượt cho phần bạn đang làm (chấm bài, tra từ).</li>
+        <li>Muốn gần như không bao giờ bị hết lượt: tạo thêm key ở <b>một project Google khác</b> (aistudio.google.com → Get API key → Create API key in new project) và dán vào ô dưới – mỗi project có hạn mức riêng. Hoặc bật thanh toán (billing) cho project để có hạn mức cao hơn nhiều.</li>
+        <li>Tra từ và dịch nhanh vẫn chạy bằng Google Dịch/từ điển miễn phí, không cần AI.</li>
+      </ul>
+      <Field label="Key Gemini dự phòng (mỗi dòng 1 key, từ project khác)" hint="App tự xoay vòng giữa các key khi một key hết lượt.">
+        <textarea className="input min-h-[60px] font-mono text-xs" value={s.geminiKeysExtra || ''} onChange={(e) => set({ geminiKeysExtra: e.target.value })} placeholder="AIza… (key thứ 2)&#10;AIza… (key thứ 3)" />
+      </Field>
+      <Field label="Key OpenAI dự phòng (tuỳ chọn, trả phí theo dùng)" hint="Chỉ dùng khi mọi key/model Gemini đều hết lượt hoặc quá tải.">
+        <input className="input" type="password" value={s.openaiKey || ''} onChange={(e) => set({ openaiKey: e.target.value.trim() })} placeholder="sk-…" />
+      </Field>
+      <div className="text-xs">
+        {q.length === 0 ? <span className="text-emerald-700">✓ Hiện không có model nào bị tạm khoá.</span> : (
+          <div className="space-y-0.5">
+            <div className="font-medium">Đang tạm khoá:</div>
+            {q.map((x) => <div key={x.model + x.key}>• {x.model} (key {x.key}) – {x.why === 'day' ? 'hết lượt hôm nay' : x.why === 'minute' ? 'hết lượt/phút' : 'Google quá tải'} · mở lại lúc {fmt(x.until)}</div>)}
+            <button className="btn-ghost !py-0.5 !text-xs mt-1" onClick={() => { clearQuotaBlocks(); force((n) => n + 1) }}>Thử lại ngay (bỏ khoá)</button>
+          </div>
+        )}
       </div>
     </div>
   )

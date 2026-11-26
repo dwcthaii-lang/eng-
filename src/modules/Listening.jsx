@@ -15,6 +15,7 @@ import { markHeard } from '../lib/srs'
 import { aiEnabled, gradeSummary } from '../lib/ai'
 import { useHotkeys } from '../lib/hotkeys'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
+import { GradeView } from '../components/GradeView'
 import { Elapsed } from '../components/Elapsed'
 import { PageHeader, SessionTimer, TierChip, Shortcuts } from '../components/ui'
 
@@ -166,7 +167,7 @@ function BlindStep({ sit, playAll, stop, playingLine, onNext }) {
     if (aiEnabled()) {
       try {
         setAi({ loading: true })
-        setAi(await gradeSummary({ transcript: L.lines.map((l) => `${l.s}: ${plainLine(l.t)}`).join('\n'), summary }))
+        setAi(await gradeSummary({ transcript: L.lines.map((l) => `${l.s}: ${plainLine(l.t)}`).join('\n'), summary, keyPoints: L.keyPoints || [] }))
       } catch (e) {
         setAi({ error: String(e.message || e) })
       }
@@ -205,12 +206,11 @@ function BlindStep({ sit, playAll, stop, playingLine, onNext }) {
           <button className="btn-primary" disabled={summary.trim().length < 10} onClick={submit}>Nộp tóm tắt & xem ý chính</button>
         ) : (
           <div className="space-y-3">
-            {ai?.loading && <div className="text-sm text-slate-500">🤖 AI đang chấm…<Elapsed /></div>}
+            {ai?.loading && <div className="text-sm text-slate-500">🤖 AI đang chấm theo từng ý chính…<Elapsed /></div>}
             {ai?.error && <div className="text-sm text-rose-600">AI lỗi: {ai.error}</div>}
             {ai?.score != null && (
-              <div className="rounded-xl bg-indigo-50 p-3 text-sm">
-                <b>AI: {ai.score}/10.</b> {ai.feedback_vi}
-                {ai.missed?.length > 0 && <div className="mt-1 text-slate-600">Bỏ lỡ: {ai.missed.join('; ')}</div>}
+              <div className="rounded-xl bg-indigo-50/60 p-3">
+                <GradeView r={ai} text={summary} kind="tóm tắt" />
               </div>
             )}
             <div className="text-sm font-medium">Tự đối chiếu – đánh dấu những ý bạn đã bắt được:</div>

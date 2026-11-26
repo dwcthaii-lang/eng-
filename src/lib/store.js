@@ -8,6 +8,7 @@ export const defaultSettings = {
   geminiKey: '',
   geminiModel: 'auto',
   openaiKey: '',
+  geminiKeysExtra: '',
   openaiModel: 'gpt-4o-mini',
   voiceA: '', // tên giọng đọc nhân vật A
   voiceB: '', // tên giọng đọc nhân vật B

@@ -10,6 +10,7 @@ import Review from './modules/Review'
 import Course from './modules/Course'
 import Grammar from './modules/Grammar'
 import { PronounceBar, SelectionLookup, PronReview } from './components/Pronounce'
+import { AiNotice } from './components/AiNotice'
 import Recall from './modules/Recall'
 import Listening from './modules/Listening'
 import Roleplay from './modules/Roleplay'
@@ -176,6 +177,7 @@ export default function App() {
       </aside>
       <PronounceBar />
       <SelectionLookup />
+      <AiNotice />
       <main className="flex-1 px-4 pt-5 pb-24 md:px-10 md:py-8 max-w-5xl">{content}</main>
 
       {/* Điều hướng cho điện thoại */}

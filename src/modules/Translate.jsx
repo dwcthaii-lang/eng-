@@ -1,5 +1,5 @@
 // Dịch đoạn văn Việt -> Anh: gợi ý từ khi bí, sửa ngữ pháp (LanguageTool) + từ vựng (AI), có lịch ôn
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { translationSet } from '../data/translations'
 import { TIERS } from '../data'
 import { useStore, update, getState, logHistory } from '../lib/store'
@@ -7,7 +7,9 @@ import { scheduleReview, nextDueLabel } from '../lib/review'
 import { similarity, chunkUsed, normalize } from '../lib/text'
 import { speak } from '../lib/speech'
 import { aiEnabled, gradeTranslation, lookupPhrase } from '../lib/ai'
-import { checkGrammar, applyFixes } from '../lib/grammar'
+import { checkGrammar, applyFixes, isMinorMatch } from '../lib/grammar'
+import { lookupViEn } from '../lib/dict'
+import { GradeView } from '../components/GradeView'
 import { today } from '../lib/date'
 import { Elapsed } from '../components/Elapsed'
 import { TierChip } from '../components/ui'
@@ -52,20 +54,47 @@ function lookupOffline(q) {
   return [...new Map(out.map((x) => [x.en, x])).values()].slice(0, 6)
 }
 
+const aiCache = {}
+
 function TranslateTask({ item }) {
   const settings = useStore((s) => s.settings)
   const [text, setText] = useState('')
   const [shownHints, setShownHints] = useState(0)
   const [q, setQ] = useState('')
   const [aiLookup, setAiLookup] = useState(null)
+  const [quick, setQuick] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const offline = useMemo(() => lookupOffline(q), [q])
+  const qRef = useRef('')
+
+  // Tra nhanh (Google/MyMemory, không cần AI) – tự chạy khi ngừng gõ 0,5 giây
+  const quickLookup = async (phrase) => {
+    const p = phrase.trim()
+    if (!p) return setQuick(null)
+    setQuick((x) => (x?.q === p ? x : { q: p, loading: true }))
+    const r = await lookupViEn(p)
+    if (qRef.current.trim() === p) setQuick({ q: p, ...(r || { none: true }) })
+  }
+  useEffect(() => {
+    qRef.current = q
+    if (!q.trim()) { setQuick(null); return }
+    const t = setTimeout(() => quickLookup(q), 500)
+    return () => clearTimeout(t)
+  }, [q])
 
   const doLookup = async () => {
-    if (!aiEnabled() || !q.trim()) return
-    setAiLookup({ loading: true })
-    try { setAiLookup(await lookupPhrase({ phrase: q, context: item.vi })) } catch (e) { setAiLookup({ error: String(e.message || e) }) }
+    const p = q.trim()
+    if (!p) return
+    quickLookup(p)
+    if (!aiEnabled()) return
+    if (aiCache[p.toLowerCase()]) return setAiLookup(aiCache[p.toLowerCase()])
+    setAiLookup({ loading: true, q: p })
+    try {
+      const r = await lookupPhrase({ phrase: p, context: item.vi })
+      aiCache[p.toLowerCase()] = r
+      if (qRef.current.trim() === p) setAiLookup(r)
+    } catch (e) { if (qRef.current.trim() === p) setAiLookup({ error: String(e.message || e) }) }
   }
 
   const submit = async () => {
@@ -98,7 +127,7 @@ function TranslateTask({ item }) {
         schedule(r)
       })
     } else schedule(null)
-    logHistory('translate', `${item.titleVi} · khớp ${out.sim}%`)
+    logHistory('translate', `${item.titleVi}`)
     setResult(out)
     setBusy(false)
   }
@@ -120,17 +149,25 @@ function TranslateTask({ item }) {
       <div className="card space-y-2">
         <div className="label">Tra nhanh khi bí từ (gõ tiếng Việt)</div>
         <div className="flex gap-2">
-          <input className="input" value={q} onChange={(e) => { setQ(e.target.value); setAiLookup(null) }} onKeyDown={(e) => e.key === 'Enter' && doLookup()} placeholder="vd: chậm tiến độ, rò khí, xả nước…" />
-          {aiEnabled() && <button className="btn-ghost" onClick={doLookup}>Hỏi AI</button>}
+          <input className="input" value={q} onChange={(e) => { setQ(e.target.value); setAiLookup(null) }} onKeyDown={(e) => e.key === 'Enter' && doLookup()} placeholder="vd: chậm tiến độ, rò khí, không xả nước…" />
+          <button className="btn-ghost shrink-0" onClick={doLookup}>{aiEnabled() ? 'Tra + hỏi AI' : 'Tra'}</button>
         </div>
         {offline.length > 0 && <div className="flex flex-wrap gap-2">{offline.map((o) => <span key={o.en} className="chip bg-sky-50 text-sky-800">{o.vi} → <b className="ml-1">{o.en}</b></span>)}</div>}
-        {q && !offline.length && !aiEnabled() && <div className="text-xs text-slate-400">Không có trong từ điển sẵn có. Nhập API key để tra bằng AI.</div>}
-        {aiLookup?.loading && <div className="text-xs text-slate-500">Đang tra…</div>}
-        {aiLookup?.error && <div className="text-xs text-rose-600">{aiLookup.error}</div>}
-        {aiLookup?.options && (
+        {quick?.loading && <div className="text-xs text-slate-500">Đang tra…</div>}
+        {quick?.main && (
           <div className="text-sm space-y-1">
-            {aiLookup.options.map((o) => <div key={o.en}><b>{o.en}</b> <span className="text-slate-500">– {o.note_vi}</span></div>)}
-            {aiLookup.example && <div className="text-slate-600">“{aiLookup.example}”</div>}
+            <div><span className="text-slate-500">Dịch nhanh:</span> <b>{quick.main}</b> <button onClick={() => speak(quick.main)}>🔈</button> <span className="text-xs text-slate-400">(máy dịch – nên kiểm tra lại)</span></div>
+            {quick.alts?.length > 0 && <div className="flex flex-wrap gap-1.5">{quick.alts.map((a) => <span key={a.en} className="chip bg-slate-100 text-slate-700">{a.en}{a.pos && <span className="ml-1 text-slate-400">({a.pos})</span>}</span>)}</div>}
+          </div>
+        )}
+        {quick?.none && !offline.length && <div className="text-xs text-slate-400">Không tìm được bản dịch nhanh{aiEnabled() ? ' – bấm “Tra + hỏi AI” (hoặc Enter).' : '.'}</div>}
+        {aiLookup?.loading && <div className="text-xs text-slate-500">🤖 AI đang gợi ý cách nói tự nhiên theo ngữ cảnh…<Elapsed /></div>}
+        {aiLookup?.error && <div className="text-xs text-rose-600">AI chưa trả lời được: {aiLookup.error}{quick?.main ? ' – dùng tạm kết quả tra nhanh ở trên.' : ''}</div>}
+        {aiLookup?.options && (
+          <div className="rounded-lg bg-indigo-50 p-2 text-sm space-y-1">
+            <div className="text-xs font-semibold text-indigo-700">🤖 AI gợi ý (theo ngữ cảnh đoạn văn)</div>
+            {aiLookup.options.map((o) => <div key={o.en}><b>{o.en}</b> <button onClick={() => speak(o.en)}>🔈</button> <span className="text-slate-500">– {o.note_vi}</span></div>)}
+            {aiLookup.example && <div className="text-slate-600">“{aiLookup.example}”{aiLookup.example_vi && <span className="text-slate-400"> – {aiLookup.example_vi}</span>}</div>}
           </div>
         )}
       </div>
@@ -147,41 +184,19 @@ function TranslateTask({ item }) {
 
       {result && (
         <div className="card space-y-4">
-          <div className="flex flex-wrap gap-4 text-sm">
-            <span>Độ khớp ý với bản mẫu: <b>{result.sim}%</b></span>
-            {result.ai?.score != null && <span>AI chấm: <b>{result.ai.score}/10</b></span>}
-            <span>Cụm từ khoá: <b>{result.used.length}/{result.terms.length}</b></span>
-          </div>
-
-          <div>
-            <div className="label mb-2">Ngữ pháp & chính tả {settings.grammarCheck ? '(LanguageTool)' : ''}</div>
-            {result.grammarError && <div className="text-sm text-rose-600">Không kiểm tra được: {result.grammarError}</div>}
-            {result.grammar && result.grammar.length === 0 && <div className="text-sm text-emerald-700">✓ Không phát hiện lỗi ngữ pháp/chính tả.</div>}
-            {result.grammar?.length > 0 && (
-              <div className="space-y-1 text-sm">
-                {result.grammar.map((m, i) => (
-                  <div key={i}>• <s className="text-rose-600">{m.wrong}</s> → <b className="text-emerald-700">{m.replacements.join(' / ') || '?'}</b> <span className="text-slate-500">– {m.message}</span></div>
-                ))}
-                <div className="rounded-lg bg-slate-50 p-2"><span className="text-slate-500">Bản đã sửa tự động: </span>{applyFixes(text, result.grammar)}</div>
-              </div>
-            )}
-            {!settings.grammarCheck && <div className="text-xs text-slate-400">Bật “Sửa ngữ pháp bằng LanguageTool” trong Cài đặt.</div>}
-          </div>
-
-          {result.aiLoading && <div className="text-sm text-slate-500">🤖 AI đang chấm bản dịch…<Elapsed /></div>}
-          {result.aiError && <div className="text-sm text-rose-600">AI lỗi: {result.aiError}</div>}
-          {result.ai && (
-            <div className="rounded-xl bg-indigo-50 p-3 text-sm space-y-2">
-              <div><b>Bản sửa của AI:</b> {result.ai.corrected}</div>
-              {result.ai.grammar?.length > 0 && <div><b>Ngữ pháp:</b>{result.ai.grammar.map((g, i) => <div key={i}>• <s className="text-rose-600">{g.from}</s> → <b className="text-emerald-700">{g.to}</b> <span className="text-slate-500">({g.why_vi})</span></div>)}</div>}
-              {result.ai.vocab?.length > 0 && <div><b>Từ vựng tự nhiên hơn:</b>{result.ai.vocab.map((g, i) => <div key={i}>• {g.from} → <b className="text-emerald-700">{g.to}</b> <span className="text-slate-500">({g.why_vi})</span></div>)}</div>}
-              {result.ai.missing_vi && <div className="text-amber-800">Thiếu ý: {result.ai.missing_vi}</div>}
-              <div className="text-slate-600">{result.ai.feedback_vi}</div>
+          {result.aiLoading && <div className="text-sm text-slate-500">🤖 AI đang chấm theo Ý của cả đoạn, sửa lỗi và viết bản tự nhiên…<Elapsed /></div>}
+          {result.aiError && <div className="text-sm text-rose-600">AI chưa chấm được: {result.aiError}</div>}
+          {result.ai && <GradeView r={result.ai} text={text} kind="dịch" />}
+          {!result.ai && (
+            <div className="text-sm text-slate-500">
+              Độ trùng từ với bản mẫu: <b>{result.sim}%</b> <span className="text-xs">(chỉ tham khảo – trùng từ không có nghĩa là đúng ý. {aiEnabled() ? 'AI sẽ chấm theo ý.' : 'Bật AI trong Cài đặt để được chấm theo ý cả câu.'})</span>
             </div>
           )}
 
+          <GrammarBlock result={result} text={text} enabled={settings.grammarCheck} />
+
           <div>
-            <div className="label mb-2">Cụm từ khoá trong đoạn</div>
+            <div className="label mb-2">Cụm từ trong bản mẫu (tham khảo – không bắt buộc, không tính điểm)</div>
             <div className="flex flex-wrap gap-2">{result.terms.map((en) => <span key={en} className={`chip ${result.used.includes(en) ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>{en}</span>)}</div>
           </div>
           <div className="rounded-xl bg-slate-50 p-3">
@@ -191,6 +206,28 @@ function TranslateTask({ item }) {
           <p className="text-xs text-slate-500">Bước cuối: đọc to bản dịch mẫu 2 lần. Đoạn này sẽ được nhắc ôn lại theo lịch – lần sau hãy thử dịch mà không cần gợi ý.</p>
         </div>
       )}
+    </div>
+  )
+}
+
+// Lỗi LanguageTool: lỗi thật trước, lỗi nhỏ (viết hoa/dấu câu) gộp gọn
+function GrammarBlock({ result, text, enabled }) {
+  const all = result.grammar || []
+  const main = all.filter((m) => !isMinorMatch(m))
+  const minor = all.filter(isMinorMatch)
+  return (
+    <div>
+      <div className="label mb-2">Kiểm tra chính tả nhanh {enabled ? '(LanguageTool)' : ''}</div>
+      {result.grammarError && <div className="text-sm text-rose-600">Không kiểm tra được: {result.grammarError}</div>}
+      {result.grammar && all.length === 0 && <div className="text-sm text-emerald-700">✓ Không phát hiện lỗi chính tả/ngữ pháp cơ bản.</div>}
+      {main.length > 0 && (
+        <div className="space-y-1 text-sm">
+          {main.map((m, i) => <div key={i}>• <s className="text-rose-600">{m.wrong}</s> → <b className="text-emerald-700">{m.replacements.join(' / ') || '?'}</b> <span className="text-slate-500">– {m.message}</span></div>)}
+        </div>
+      )}
+      {minor.length > 0 && <div className="mt-1 text-xs text-slate-500">Lỗi nhỏ viết hoa/dấu câu ({minor.length}): {minor.slice(0, 6).map((m) => `${m.wrong || '·'}→${m.replacements[0] ?? ''}`).join(', ')}</div>}
+      {all.length > 0 && !result.ai && <div className="mt-1 rounded-lg bg-slate-50 p-2 text-sm"><span className="text-slate-500">Bản sửa chính tả tự động: </span>{applyFixes(text, all)}</div>}
+      {!enabled && <div className="text-xs text-slate-400">Bật “Sửa ngữ pháp bằng LanguageTool” trong Cài đặt.</div>}
     </div>
   )
 }

@@ -11,9 +11,10 @@ import { addReactivate, isDue, vocabId } from '../lib/srs'
 import { chunkUsed, similarity, normalize } from '../lib/text'
 import { speak } from '../lib/speech'
 import { aiEnabled, gradeWriting } from '../lib/ai'
-import { checkGrammar, applyFixes } from '../lib/grammar'
+import { checkGrammar, applyFixes, isMinorMatch } from '../lib/grammar'
 import { today } from '../lib/date'
 import { useMic, MicButton, LiveTranscript } from '../components/Mic'
+import { GradeView } from '../components/GradeView'
 import { Elapsed } from '../components/Elapsed'
 import { PageHeader, SessionTimer, TierChip } from '../components/ui'
 
@@ -136,24 +137,23 @@ function Journal() {
           <button className="btn-primary" disabled={normalize(text).length < 15} onClick={submit}>Lưu {aiEnabled() ? '& nhờ AI sửa' : ''}</button>
           <span className="text-xs text-slate-500">{normalize(text).length} từ</span>
         </div>
-        {fb?.loading && <div className="text-sm text-slate-500">🤖 AI đang sửa…<Elapsed /></div>}
+        {fb?.loading && <div className="text-sm text-slate-500">🤖 AI đang chấm theo ý, sửa lỗi và viết bản tự nhiên…<Elapsed /></div>}
         {fb?.error && <div className="text-sm text-rose-600">AI lỗi: {fb.error}</div>}
-        {fb?.corrected && (
-          <div className="rounded-xl bg-indigo-50 p-3 text-sm space-y-2">
-            <div><b>Bản đã sửa:</b> {fb.corrected} <button onClick={() => speak(fb.corrected)}>🔈</button></div>
-            {fb.top_fixes?.map((f, i) => <div key={i}>• <s className="text-rose-600">{f.from}</s> → <b className="text-emerald-700">{f.to}</b> <span className="text-slate-500">({f.why_vi})</span></div>)}
-            <div className="text-slate-600">{fb.feedback_vi}</div>
+        {(fb?.corrected || fb?.score != null) && (
+          <div className="rounded-xl bg-indigo-50/60 p-3">
+            <GradeView r={fb} text={text} kind="viết" />
           </div>
         )}
-        {fb?.saved && !fb.loading && !fb.corrected && !fb.error && <div className="text-sm text-emerald-600">✓ Đã lưu.</div>}
+        {fb?.saved && !fb.loading && !fb.corrected && fb.score == null && !fb.error && <div className="text-sm text-emerald-600">✓ Đã lưu.</div>}
         {gram?.loading && <div className="text-sm text-slate-500">Đang kiểm tra ngữ pháp…</div>}
         {gram?.error && <div className="text-sm text-rose-600">Không kiểm tra được ngữ pháp: {gram.error}</div>}
         {gram?.matches && (
           <div className="rounded-xl bg-slate-50 p-3 text-sm space-y-1">
             <b>Ngữ pháp & chính tả (LanguageTool):</b>
-            {gram.matches.length === 0 ? <div className="text-emerald-700">✓ Không phát hiện lỗi.</div> : gram.matches.map((m, i) => (
+            {gram.matches.length === 0 ? <div className="text-emerald-700">✓ Không phát hiện lỗi.</div> : gram.matches.filter((m) => !isMinorMatch(m)).map((m, i) => (
               <div key={i}>• <s className="text-rose-600">{m.wrong}</s> → <b className="text-emerald-700">{m.replacements.join(' / ') || '?'}</b> <span className="text-slate-500">– {m.message}</span></div>
             ))}
+            {gram.matches.some(isMinorMatch) && <div className="text-xs text-slate-500">Lỗi nhỏ viết hoa/dấu câu: {gram.matches.filter(isMinorMatch).slice(0, 6).map((m) => `${m.wrong || '·'}→${m.replacements[0] ?? ''}`).join(', ')}</div>}
             {gram.matches.length > 0 && <div className="pt-1"><span className="text-slate-500">Bản đã sửa: </span>{applyFixes(text, gram.matches)}</div>}
           </div>
         )}

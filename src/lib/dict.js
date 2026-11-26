@@ -156,7 +156,7 @@ export async function translateText(en) {
   } catch {}
   if (!out && aiEnabled()) {
     try {
-      const r = await askJson('Translate English to natural, everyday Vietnamese. Return JSON only.', `Sentence: "${key}"\nReturn JSON: {"vi": "..."}`, { maxMs: 20000 })
+      const r = await askJson('Translate English to natural, everyday Vietnamese. Return JSON only.', `Sentence: "${key}"\nReturn JSON: {"vi": "..."}`, { maxMs: 20000, bg: true })
       if (r?.vi) out = { vi: String(r.vi), by: 'AI' }
     } catch {}
   }
@@ -209,7 +209,7 @@ async function flushNatural(ctx) {
 - Keep technical terms commonly used in Vietnamese labs (wafer, SEM, cleanroom…) if Vietnamese engineers would say them in English.
 - Short, smooth sentences; no explanations. Return JSON only: {"vi": ["…", …]} with exactly the same number and order as the input lines.`,
         `Context / full conversation (for meaning and tone):\n${ctx || '(none)'}\n\nLines to translate (JSON array):\n${JSON.stringify(batch)}`,
-        { maxMs: 25000 }
+        { maxMs: 25000, bg: true }
       )
       out = Array.isArray(r?.vi) ? r.vi : []
     } catch {}
@@ -221,4 +221,40 @@ async function flushNatural(ctx) {
     })
     try { localStorage.setItem(TR_KEY, JSON.stringify(tr)) } catch {}
   }
+}
+
+// Tra nhanh Việt → Anh KHÔNG cần AI (Google + MyMemory): có ngay trong ~1 giây, kể cả khi AI hết lượt
+const viEnCache = {}
+export async function lookupViEn(phrase) {
+  const q = phrase.trim()
+  if (!q) return null
+  const k = q.toLowerCase()
+  if (viEnCache[k]) return viEnCache[k]
+  const out = { main: '', alts: [], by: [] }
+  const google = (async () => {
+    try {
+      const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl=en&dt=t&dt=bd&q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout?.(6000) })
+      const d = await r.json()
+      const t = (d?.[0] || []).map((x) => x?.[0] || '').join('').trim()
+      if (t) { out.main = t; out.by.push('Google') }
+      ;(d?.[1] || []).forEach((g) => (g?.[1] || []).slice(0, 5).forEach((w) => out.alts.push({ en: w, pos: posVi(g?.[0] || '') })))
+    } catch {}
+  })()
+  const mm = (async () => {
+    try {
+      const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=vi|en`, { signal: AbortSignal.timeout?.(6000) })
+      const d = await r.json()
+      const seen = new Set()
+      ;[d?.responseData?.translatedText, ...(d?.matches || []).filter((m) => m.quality >= 70 || m.match >= 0.9).map((m) => m.translation)]
+        .forEach((t) => { t = String(t || '').trim(); if (t && t.length < 80 && t.toLowerCase() !== k && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); out.alts.push({ en: t, pos: '', by: 'MyMemory' }) } })
+    } catch {}
+  })()
+  await Promise.all([google, mm])
+  const uniq = new Map()
+  out.alts.forEach((a) => { const kk = a.en.toLowerCase(); if (kk !== out.main.toLowerCase() && !uniq.has(kk)) uniq.set(kk, a) })
+  out.alts = [...uniq.values()].slice(0, 8)
+  if (!out.main && out.alts[0]) out.main = out.alts.shift().en
+  if (!out.main) return null
+  viEnCache[k] = out
+  return out
 }
