@@ -4,7 +4,7 @@ import { useStore } from '../lib/store'
 import { today, fmtMin } from '../lib/date'
 import { PageHeader } from '../components/ui'
 
-const MOD = { recall: '🗣️ Nói', listening: '🎧 Nghe', roleplay: '⏱️ Nhập vai', writing: '✍️ Viết', translate: '✍️ Dịch', course: '🧭 Lộ trình' }
+const MOD = { recall: '🗣️ Nói', listening: '🎧 Nghe', roleplay: '⏱️ Nhập vai', writing: '✍️ Viết', translate: '✍️ Dịch', course: '🧭 Lộ trình', grammar: '📐 Ngữ pháp' }
 
 export default function History() {
   const history = useStore((s) => s.history)

@@ -37,7 +37,9 @@ export function chunkUsed(chunk, transcript) {
   const said = normalize(transcript).map(stem)
   const saidSet = new Set(said)
   return alts.some((alt) => {
-    const words = normalize(alt.replace(/\(.*?\)/g, '')).filter((w) => !STOP.has(w)).map(stem)
+    const all = normalize(alt.replace(/\(.*?\)/g, ''))
+    let words = all.filter((w) => !STOP.has(w)).map(stem)
+    if (!words.length) words = all.map(stem) // cụm chỉ gồm từ ngắn như "is", "be" (ngữ pháp)
     if (!words.length) return false
     const hit = words.filter((w) => saidSet.has(w)).length
     return hit / words.length >= (words.length >= 3 ? 0.75 : 1)

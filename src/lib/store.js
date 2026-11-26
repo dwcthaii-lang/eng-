@@ -39,6 +39,7 @@ const initial = {
   enrich: {}, // vocabId -> dữ liệu mở rộng do AI tạo
   lastNotified: '',
   courseExtra: {}, // unitId -> [{en, vi, ex}] do AI thêm
+  grammarVerbs: {}, // động từ bất quy tắc: v1 -> { box, due, ok, n }
 }
 
 function load() {

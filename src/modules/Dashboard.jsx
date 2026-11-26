@@ -12,6 +12,7 @@ const PLAN = [
   { key: 'recall', label: 'Từ vựng chủ động', min: 20, href: '#/recall', icon: '🗣️' },
   { key: 'listening', label: 'Nghe cai phụ đề', min: 25, href: '#/listening', icon: '🎧' },
   { key: 'roleplay', label: 'Nhập vai phản xạ', min: 30, href: '#/roleplay', icon: '⏱️' },
+  { key: 'grammar', label: 'Ngữ pháp', min: 10, href: '#/grammar', icon: '📐' },
   { key: 'writing', label: 'Đọc & Viết', min: 15, href: '#/writing', icon: '✍️' },
 ]
 

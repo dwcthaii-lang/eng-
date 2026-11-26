@@ -8,6 +8,7 @@ import { stopSpeaking } from './lib/speech'
 import Dashboard from './modules/Dashboard'
 import Review from './modules/Review'
 import Course from './modules/Course'
+import Grammar from './modules/Grammar'
 import Recall from './modules/Recall'
 import Listening from './modules/Listening'
 import Roleplay from './modules/Roleplay'
@@ -24,6 +25,7 @@ const NAV = [
   { path: 'recall', label: 'Từ vựng chủ động', short: 'Nói', icon: '🗣️', hint: 'M1 · 20′', main: true },
   { path: 'listening', label: 'Nghe cai phụ đề', short: 'Nghe', icon: '🎧', hint: 'M2 · 25′', main: true },
   { path: 'roleplay', label: 'Nhập vai phản xạ', short: 'Nhập vai', icon: '⏱️', hint: 'M3 · 30′', main: true },
+  { path: 'grammar', label: 'Ngữ pháp', short: 'Ngữ pháp', icon: '📐', hint: 'thì · câu ĐK' },
   { path: 'writing', label: 'Đọc & Viết', short: 'Đọc-Viết', icon: '✍️', hint: '15′' },
   { path: 'vocab', label: 'Kho từ vựng', short: 'Từ vựng', icon: '📚', hint: 'cụm từ' },
   { path: 'library', label: 'Thư viện bài học', short: 'Bài học', icon: '🗃️', hint: '+AI' },
@@ -105,13 +107,14 @@ export default function App() {
   useReminder()
   useEffect(() => setMoreOpen(false), [page])
 
-  const moduleKey = { recall: 'recall', listening: 'listening', roleplay: 'roleplay', writing: 'writing', vocab: 'recall', review: 'recall', course: 'course' }[page]
+  const moduleKey = { recall: 'recall', listening: 'listening', roleplay: 'roleplay', writing: 'writing', vocab: 'recall', review: 'recall', course: 'course', grammar: 'grammar' }[page]
   useActiveTime(moduleKey)
 
   let content
   switch (page) {
     case 'review': content = <Review />; break
     case 'course': content = <Course key={(param || 'x') + (param2 || '')} unitId={param} mode={param2} />; break
+    case 'grammar': content = <Grammar key={(param || 'x') + (param2 || '')} id={param} mode={param2} />; break
     case 'recall': content = <Recall key={param || 'x'} mode={param} />; break
     case 'listening': content = <Listening key={param || 'x'} id={param} />; break
     case 'roleplay': content = <Roleplay key={param || 'x'} id={param} />; break

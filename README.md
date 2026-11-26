@@ -28,10 +28,13 @@ Micro trên điện thoại chỉ hoạt động qua link **https**. Cách miễ
 Dữ liệu trên điện thoại và máy tính là riêng. Muốn chuyển: **Cài đặt → Xuất file sao lưu** ở máy này, **Nhập file sao lưu** ở máy kia.
 
 ## Ôn tập (lặp lại ngắt quãng)
-Mỗi bài đã học (thẻ nói, bài nghe, nhập vai, đoạn dịch) và mỗi cụm từ đều có lịch ôn riêng: 1 → 3 → 7 → 15 → 30+ ngày; nhớ tốt thì giãn ra, quên thì ôn sớm. Mở **📅 Ôn tập hôm nay** mỗi ngày trước khi học bài mới. Bật nhắc ở **Cài đặt → Nhắc ôn hằng ngày** (thông báo trình duyệt + file lịch .ics cho Google Calendar).
+Mỗi bài đã học (thẻ nói, bài nghe, nhập vai, đoạn dịch, bài ngữ pháp) và mỗi cụm từ đều có lịch ôn riêng: 1 → 3 → 7 → 15 → 30+ ngày; nhớ tốt thì giãn ra, quên thì ôn sớm. Mở **📅 Ôn tập hôm nay** mỗi ngày trước khi học bài mới. Bật nhắc ở **Cài đặt → Nhắc ôn hằng ngày** (thông báo trình duyệt + file lịch .ics cho Google Calendar).
 
 ## 🧭 Lộ trình từ vựng (Đời sống → IELTS 6.5)
 510 từ/cụm từ thông dụng chia 34 chủ đề, 4 cấp: Nền tảng (A2) → Giao tiếp hằng ngày (B1) → IELTS Speaking 6.0–6.5 (B2) → Nâng cao 7+ (C1). Học 5 từ/lượt: nghe & nhại câu ví dụ → nói lại cả câu khi từ bị che. Cấp sau mở khi nói được 70% cấp trước. Có API key thì mỗi chủ đề thêm được từ mới không giới hạn.
+
+## 📐 Ngữ pháp cho người nói
+Mục **Ngữ pháp** có 15 bài (các thì, câu hỏi, động từ khuyết thiếu, mạo từ, so sánh, câu điều kiện, bị động, V-ing/to V, mệnh đề quan hệ, câu tường thuật, used to). Mỗi bài có ghi chú (khi nào dùng, công thức, dấu hiệu, lỗi người Việt hay mắc, ví dụ), sau đó luyện 3 bước: **chọn đáp án → sửa câu sai → tự nói câu**. Ngoài ra có công cụ **“Chọn thì nào?”**, **bảng tóm tắt các thì** và **67 động từ bất quy tắc**. Mọi bài đều tự vào lịch ôn.
 
 ## Thêm bài mới không giới hạn
 **Thư viện bài học → ✨ Tạo bằng AI** (cần API key Gemini miễn phí trong Cài đặt): AI soạn tình huống mới đủ cho cả 3 module theo chủ đề bạn muốn. Có thể xuất/nhập gói bài học .json.

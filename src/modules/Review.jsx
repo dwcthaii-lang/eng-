@@ -1,4 +1,4 @@
-// Ôn tập hôm nay: gom mọi bài đến hạn (thẻ nói, cụm từ, bài nghe, nhập vai, đoạn dịch)
+// Ôn tập hôm nay: gom mọi bài đến hạn (thẻ nói, cụm từ, bài nghe, nhập vai, đoạn dịch, ngữ pháp)
 import { useStore } from '../lib/store'
 import { REVIEW_TYPES, dueReviews } from '../lib/review'
 import { isDue } from '../lib/srs'
@@ -26,12 +26,13 @@ export default function Review() {
     <div>
       <PageHeader title="📅 Ôn tập hôm nay" subtitle="Lặp lại ngắt quãng: mỗi bài bạn đã học sẽ quay lại đúng lúc sắp quên (1 → 3 → 7 → 15 → 30+ ngày). Nhớ tốt thì giãn lịch ra, quên thì ôn lại sớm." />
 
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-5 mb-4">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 mb-4">
         {[
           ['🗣️ Thẻ nói', recallDue.length],
           ['📚 Cụm từ', vocabDue.length],
           ['🎧 Nghe', due.filter((r) => r.type === 'listening').length],
           ['🧭 Chủ đề từ vựng', due.filter((r) => r.type === 'unit').length],
+          ['📐 Ngữ pháp', due.filter((r) => r.type === 'grammar').length],
           ['⏱️ Nhập vai + ✍️ Dịch', due.filter((r) => r.type === 'roleplay' || r.type === 'translate').length],
         ].map(([k, v]) => (
           <div key={k} className={`card !p-4 ${v ? 'border-rose-200' : ''}`}><div className="text-sm text-slate-500">{k}</div><div className={`text-3xl font-bold ${v ? 'text-rose-600' : 'text-emerald-600'}`}>{v}</div></div>
@@ -42,7 +43,7 @@ export default function Review() {
         <div className="card mb-4">
           <div className="text-lg font-semibold">✅ Không còn gì cần ôn hôm nay!</div>
           <p className="mt-1 text-sm text-slate-500">{nextDue ? `Lần ôn tiếp theo: ${nextDue.due.slice(8, 10)}/${nextDue.due.slice(5, 7)}. ` : 'Hãy học bài mới để có lịch ôn. '}Bây giờ bạn có thể học thêm bài mới.</p>
-          <div className="mt-3 flex flex-wrap gap-2"><a className="btn-primary" href="#/recall">🗣️ Học thẻ mới</a><a className="btn-ghost" href="#/listening">🎧 Bài nghe mới</a><a className="btn-ghost" href="#/roleplay">⏱️ Nhập vai mới</a></div>
+          <div className="mt-3 flex flex-wrap gap-2"><a className="btn-primary" href="#/recall">🗣️ Học thẻ mới</a><a className="btn-ghost" href="#/listening">🎧 Bài nghe mới</a><a className="btn-ghost" href="#/roleplay">⏱️ Nhập vai mới</a><a className="btn-ghost" href="#/grammar">📐 Ngữ pháp</a></div>
         </div>
       ) : (
         <div className="card mb-4 space-y-3">
