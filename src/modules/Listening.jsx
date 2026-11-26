@@ -5,11 +5,13 @@ import { useSituations, findSituation, TIERS } from '../data'
 import { scheduleReview, reviewOf, nextDueLabel } from '../lib/review'
 import { update, useStore, logHistory } from '../lib/store'
 import { speakLines, speak, stopSpeaking, useSpeechRecognition } from '../lib/speech'
-import { parseLine, plainLine, intonation, sameAnswer, similarity } from '../lib/text'
+import { parseLine, plainLine, intonation, sameAnswer, similarity, normalize } from '../lib/text'
+import { SentenceVi } from '../components/SentenceVi'
+import { translateText } from '../lib/dict'
 import { markHeard } from '../lib/srs'
 import { aiEnabled, gradeSummary } from '../lib/ai'
 import { useHotkeys } from '../lib/hotkeys'
-import { useMic, MicButton, LiveTranscript } from '../components/Mic'
+import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { PageHeader, SessionTimer, TierChip, Shortcuts } from '../components/ui'
 
 export default function Listening({ id }) {
@@ -280,7 +282,7 @@ function GapStep({ sit, settings, playAll, stop, playingLine, onNext }) {
           <div key={li} className={`flex gap-3 rounded-xl p-2 ${playingLine === li ? 'bg-indigo-50' : ''}`}>
             <button className="text-slate-400 hover:text-indigo-600" onClick={() => playLine(li)} title="Nghe câu này">🔈</button>
             <span className="w-6 shrink-0 font-bold text-slate-400">{L.lines[li].s}</span>
-            <div className="leading-9">
+            <div className="flex-1 leading-9">
               {parts.map((p, pi) => {
                 if (p.type === 'text') return <span key={pi}>{p.text.replace(/\*/g, '')}</span>
                 const k = `${li}-${pi}`
@@ -293,7 +295,7 @@ function GapStep({ sit, settings, playAll, stop, playingLine, onNext }) {
                       disabled={checked}
                       onFocus={() => setActive(k)}
                       onChange={(e) => setVals({ ...vals, [k]: e.target.value })}
-                      style={{ width: `${Math.max(6, p.text.length + 2)}ch` }}
+                      style={{ width: `calc(${Math.max(6, p.text.length + 1, (vals[k] || '').length + 1)}ch + 1.25rem)` }}
                       className={`rounded-md border px-2 py-0.5 text-sm ${
                         checked ? (ok ? 'border-emerald-400 bg-emerald-50' : 'border-rose-400 bg-rose-50') : active === k ? 'border-indigo-500 ring-2 ring-indigo-200' : 'border-slate-300'
                       }`}
@@ -302,6 +304,7 @@ function GapStep({ sit, settings, playAll, stop, playingLine, onNext }) {
                   </span>
                 )
               })}
+              {checked && <SentenceVi en={plainLine(L.lines[li].t)} className="!text-sm leading-6" />}
             </div>
           </div>
         ))}
@@ -321,6 +324,7 @@ function GapStep({ sit, settings, playAll, stop, playingLine, onNext }) {
             <div className="label">Giải thích hiện tượng nối âm / nuốt âm</div>
             <div className="font-bold">{correctCount}/{gaps.length} đúng</div>
           </div>
+          <div className="text-xs text-slate-500">🇻🇳 Nghĩa tiếng Việt của từng câu đã hiện ngay dưới câu trong bài ở trên.</div>
           {gaps.map((g) => (
             <div key={g.key} className="rounded-xl bg-slate-50 p-3 text-sm">
               <b className="text-indigo-700">“{g.text}”</b> — {g.rule}
@@ -361,7 +365,14 @@ function ShadowStep({ sit, settings, onDone }) {
   const [scores, setScores] = useState({})
   const [rate, setRate] = useState([0.8, 0.9, 1.0, 1.1].includes(settings.speechRate) ? settings.speechRate : 1.0)
   const [running, setRunning] = useState(false)
+  const [mode, setMode] = useState('speak') // speak = shadow bằng mic · type = nghe rồi gõ lại (chính tả)
   const rec = useSpeechRecognition()
+  useEffect(() => { L.lines.forEach((l) => translateText(plainLine(l.t))) }, [L])
+  const submitTyped = (i, text) => {
+    const sc = Math.round(similarity(text, plainLine(L.lines[i].t)) * 100)
+    setScores((s) => ({ ...s, [i]: { sc, said: text, typed: true } }))
+    if (i + 1 < L.lines.length) { setCur(i + 1); setTimeout(() => listen(i + 1), 300) }
+  }
   const doneRef = useRef(false)
 
   const lineOpts = (l) => ({ voiceName: l.s === 'A' ? settings.voiceA : settings.voiceB, voiceIndex: l.s === 'A' ? 0 : 1, rate })
@@ -398,7 +409,7 @@ function ShadowStep({ sit, settings, onDone }) {
     }
   }, [allDone, onDone, scores])
 
-  useHotkeys({ r: () => listen(), s: () => shadow(), ArrowDown: () => setCur((c) => Math.min(L.lines.length - 1, c + 1)), ArrowUp: () => setCur((c) => Math.max(0, c - 1)) })
+  useHotkeys({ r: () => listen(), s: () => (mode === 'speak' ? shadow() : listen()), ArrowDown: () => setCur((c) => Math.min(L.lines.length - 1, c + 1)), ArrowUp: () => setCur((c) => Math.max(0, c - 1)) })
 
   return (
     <div className="space-y-4">
@@ -413,24 +424,40 @@ function ShadowStep({ sit, settings, onDone }) {
             <button key={r} className={rate === r ? 'btn-primary !py-1' : 'btn-ghost !py-1'} onClick={() => setRate(r)}>{r}×</button>
           ))}
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-slate-500">Cách luyện:</span>
+          <button className={mode === 'speak' ? 'btn-primary !py-1' : 'btn-ghost !py-1'} onClick={() => setMode('speak')}>🎙️ Nói (shadow)</button>
+          <button className={mode === 'type' ? 'btn-primary !py-1' : 'btn-ghost !py-1'} onClick={() => { setMode('type'); listen(cur) }}>⌨️ Gõ lại (khi không tiện nói)</button>
+        </div>
+        {mode === 'type' && <p className="mt-2 text-sm text-slate-600">Câu chưa làm sẽ bị <b>làm mờ</b>. Nghe (🔈 hoặc phím <span className="kbd">R</span>), gõ lại đúng những gì nghe được rồi Enter. App so từng từ và tô đỏ chỗ bạn nghe thiếu/sai.</p>}
       </div>
       <div className="card space-y-2">
         {L.lines.map((l, i) => (
           <div key={i} onClick={() => setCur(i)} className={`flex items-start gap-3 rounded-xl p-3 cursor-pointer ${cur === i ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'hover:bg-slate-50'}`}>
             <span className="w-6 shrink-0 font-bold text-slate-400">{l.s}</span>
             <div className="flex-1 text-lg leading-relaxed">
-              <StressedLine text={l.t} /> <span className="text-indigo-500 font-bold">{intonation(l.t)}</span>
+              <div className={mode === 'type' && !scores[i] ? 'select-none blur-sm' : ''} data-no-lookup={mode === 'type' && !scores[i] ? '' : undefined}>
+                {mode === 'type' && scores[i]?.typed ? <DiffLine model={plainLine(l.t)} typed={scores[i].said} /> : <StressedLine text={l.t} />} <span className="text-indigo-500 font-bold">{intonation(l.t)}</span>
+              </div>
+              {(mode === 'speak' || scores[i]) && <SentenceVi en={plainLine(l.t)} className="!text-sm" />}
               {scores[i] && (
                 <div className="mt-1 text-xs text-slate-500">
-                  <span className={`font-semibold ${scores[i].sc >= 75 ? 'text-emerald-600' : scores[i].sc >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>{scores[i].sc}%</span> · mic nghe được: “{scores[i].said || '—'}”
+                  <span className={`font-semibold ${scores[i].sc >= 75 ? 'text-emerald-600' : scores[i].sc >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>{scores[i].sc}%</span> · {scores[i].typed ? 'bạn gõ' : 'mic nghe được'}: “{scores[i].said || '—'}”
+                </div>
+              )}
+              {mode === 'type' && cur === i && (
+                <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                  <TypeFallback key={'t' + i} onSubmit={(t) => submitTyped(i, t)} placeholder={scores[i] ? 'Gõ lại lần nữa rồi Enter…' : 'Gõ lại câu vừa nghe rồi Enter…'} />
                 </div>
               )}
             </div>
             <div className="flex shrink-0 gap-1">
               <button className="btn-ghost !px-2 !py-1" onClick={(e) => { e.stopPropagation(); listen(i) }}>🔈</button>
-              <button className={`btn !px-3 !py-1 ${running && cur === i ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`} onClick={(e) => { e.stopPropagation(); shadow(i) }} disabled={running}>
-                {running && cur === i ? '● Đang ghi' : 'Shadow'}
-              </button>
+              {mode === 'speak' && (
+                <button className={`btn !px-3 !py-1 ${running && cur === i ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`} onClick={(e) => { e.stopPropagation(); shadow(i) }} disabled={running}>
+                  {running && cur === i ? '● Đang ghi' : 'Shadow'}
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -445,7 +472,25 @@ function ShadowStep({ sit, settings, onDone }) {
           </div>
         </div>
       )}
-      <Shortcuts items={[['S', 'shadow câu đang chọn'], ['R', 'nghe câu đang chọn'], ['↑ ↓', 'chọn câu']]} />
+      <Shortcuts items={mode === 'speak' ? [['S', 'shadow câu đang chọn'], ['R', 'nghe câu đang chọn'], ['↑ ↓', 'chọn câu']] : [['R', 'nghe câu'], ['Enter', 'nộp câu gõ'], ['Esc', 'thoát ô gõ']]} />
     </div>
+  )
+}
+
+// So từng từ: từ bạn gõ thiếu/sai được tô đỏ trong câu gốc
+function DiffLine({ model, typed }) {
+  const have = normalize(typed)
+  const used = new Array(have.length).fill(false)
+  const words = model.split(/(\s+)/)
+  return (
+    <span>
+      {words.map((w, i) => {
+        const n = normalize(w)
+        if (!n.length) return <span key={i}>{w}</span>
+        const j = have.findIndex((h, k) => !used[k] && h === n[0])
+        if (j >= 0) { used[j] = true; return <span key={i} className="text-emerald-700">{w}</span> }
+        return <span key={i} className="rounded bg-rose-100 px-0.5 text-rose-700 underline decoration-wavy">{w}</span>
+      })}
+    </span>
   )
 }
