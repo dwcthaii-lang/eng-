@@ -236,7 +236,7 @@ export default function Settings() {
 
       <div className="card text-sm space-y-1">
         <div className="label mb-1">Phím tắt</div>
-        <div><span className="kbd">Space</span> (giữ) nói · <span className="kbd">R</span> nghe lại · <span className="kbd">H</span> gợi ý · <span className="kbd">Enter</span> tiếp tục · <span className="kbd">T</span> hiện/ẩn chữ (nhập vai) · <span className="kbd">S</span> shadow câu đang chọn</div>
+        <div><span className="kbd">Space</span> (giữ) nói · <span className="kbd">Ctrl</span> nghe lại (nhấn rồi thả riêng phím Ctrl – dùng được cả khi đang gõ) · <span className="kbd">H</span> gợi ý · <span className="kbd">Enter</span> tiếp tục · <span className="kbd">T</span> hiện/ẩn chữ (nhập vai) · <span className="kbd">S</span> shadow câu đang chọn</div>
       </div>
     </div>
   )

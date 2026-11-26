@@ -352,7 +352,7 @@ function LearnCard({ item, settings, onNext }) {
         {said && <div className="text-sm">Khớp <b className={said.sc >= 75 ? 'text-emerald-600' : 'text-amber-600'}>{said.sc}%</b> {said.sc >= 75 ? '👏' : '– nghe lại (R) và thử lần nữa'}</div>}
         <button className="btn-primary" onClick={onNext}>Tiếp <span className="kbd !bg-indigo-500 !text-white !border-indigo-400">Enter</span></button>
       </div>
-      <Shortcuts items={[['Space (giữ)', 'nhại lại'], ['R', 'nghe lại'], ['Enter', 'từ tiếp']]} />
+      <Shortcuts items={[['Space (giữ)', 'nhại lại'], ['Ctrl', 'nghe lại'], ['Enter', 'từ tiếp']]} />
     </div>
   )
 }
@@ -395,13 +395,13 @@ function SayCard({ item, settings, aidedByDefault, onDone }) {
           <SentenceVi en={item.ex} vi={item.exVi} ctx={exCtx(item)} />
           <SentenceReview key={ans.t} transcript={ans.t} chunks={[item.en]} model={item.ex} situationVi={`Nói một câu dùng “${item.en}” (${item.vi})`} />
           <div className="flex gap-2">
-            <button className="btn-ghost" onClick={play}>🔊 Nghe <span className="kbd">R</span></button>
+            <button className="btn-ghost" onClick={play}>🔊 Nghe <span className="kbd">Ctrl</span></button>
             <button className="btn-primary" onClick={next}>Tiếp <span className="kbd !bg-indigo-500 !text-white !border-indigo-400">Enter</span></button>
           </div>
           {!ans.ok && <p className="text-xs text-slate-500">Từ này sẽ quay lại vào ngày mai. Hãy nghe và nói lại câu đúng 2 lần ngay bây giờ.</p>}
         </div>
       )}
-      <Shortcuts items={[['Space (giữ)', 'nói'], ['H', 'gợi ý'], ['R', 'nghe câu'], ['Enter', 'tiếp']]} />
+      <Shortcuts items={[['Space (giữ)', 'nói'], ['H', 'gợi ý'], ['Ctrl', 'nghe câu'], ['Enter', 'tiếp']]} />
     </div>
   )
 }

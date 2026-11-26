@@ -262,7 +262,7 @@ function Session({ sit, mode, onExit }) {
             <div className="text-2xl">{phase === 'ai' ? '🔊' : phase === 'thinking' ? '🤔' : '👤'}</div>
             <div className="flex-1">
               <div className="text-sm font-semibold">{R.aiName}</div>
-              {showText ? <div>{currentAi.text}</div> : <button onClick={() => setShowText(true)} className="text-left text-slate-400 text-sm italic">(Chữ đang ẩn – nghe bằng tai. Chạm vào đây hoặc <span className="kbd">T</span> để hiện, <span className="kbd">R</span> nghe lại)</button>}
+              {showText ? <div>{currentAi.text}</div> : <button onClick={() => setShowText(true)} className="text-left text-slate-400 text-sm italic">(Chữ đang ẩn – nghe bằng tai. Chạm vào đây hoặc <span className="kbd">T</span> để hiện, <span className="kbd">Ctrl</span> nghe lại)</button>}
             </div>
             <button className="btn-ghost" onClick={() => sayAi(currentAi.text)}>🔁</button>
           </div>
@@ -297,7 +297,7 @@ function Session({ sit, mode, onExit }) {
         </div>
       </div>
       {error && <div className="mt-3 text-sm text-rose-600">{error}</div>}
-      <div className="mt-4"><Shortcuts items={[['Space (giữ)', 'nói'], ['H', 'gợi ý'], ['R', 'nghe lại'], ['T', 'hiện/ẩn chữ']]} /></div>
+      <div className="mt-4"><Shortcuts items={[['Space (giữ)', 'nói'], ['H', 'gợi ý'], ['Ctrl', 'nghe lại'], ['T', 'hiện/ẩn chữ']]} /></div>
     </div>
   )
 }

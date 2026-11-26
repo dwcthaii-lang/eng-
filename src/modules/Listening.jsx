@@ -224,7 +224,7 @@ function BlindStep({ sit, playAll, stop, playingLine, onNext }) {
           </div>
         )}
       </div>
-      <Shortcuts items={[['R', 'nghe lại'], ['Space (giữ)', 'nói tóm tắt']]} />
+      <Shortcuts items={[['Ctrl', 'nghe lại'], ['Space (giữ)', 'nói tóm tắt']]} />
     </div>
   )
 }
@@ -341,7 +341,7 @@ function GapStep({ sit, settings, playAll, stop, playingLine, onNext }) {
           </div>
         </div>
       )}
-      <Shortcuts items={[['R', 'nghe cả bài'], ['Space (giữ)', 'nói vào ô đang chọn'], ['Tab', 'ô tiếp theo']]} />
+      <Shortcuts items={[['Ctrl', 'nghe cả bài'], ['Space (giữ)', 'nói vào ô đang chọn'], ['Tab', 'ô tiếp theo']]} />
     </div>
   )
 }
@@ -433,7 +433,7 @@ function ShadowStep({ sit, settings, onDone }) {
           <button className={mode === 'speak' ? 'btn-primary !py-1' : 'btn-ghost !py-1'} onClick={() => setMode('speak')}>🎙️ Nói (shadow)</button>
           <button className={mode === 'type' ? 'btn-primary !py-1' : 'btn-ghost !py-1'} onClick={() => { setMode('type'); listen(cur) }}>⌨️ Gõ lại (khi không tiện nói)</button>
         </div>
-        {mode === 'type' && <p className="mt-2 text-sm text-slate-600">Câu chưa làm sẽ bị <b>làm mờ</b>. Nghe (🔈 hoặc phím <span className="kbd">R</span>), gõ lại đúng những gì nghe được rồi Enter. App so từng từ và tô đỏ chỗ bạn nghe thiếu/sai.</p>}
+        {mode === 'type' && <p className="mt-2 text-sm text-slate-600">Câu chưa làm sẽ bị <b>làm mờ</b>. Nghe (🔈 hoặc phím <span className="kbd">Ctrl</span>), gõ lại đúng những gì nghe được rồi Enter. App so từng từ và tô đỏ chỗ bạn nghe thiếu/sai.</p>}
       </div>
       <div className="card space-y-2">
         {L.lines.map((l, i) => (
@@ -476,7 +476,7 @@ function ShadowStep({ sit, settings, onDone }) {
           </div>
         </div>
       )}
-      <Shortcuts items={mode === 'speak' ? [['S', 'shadow câu đang chọn'], ['R', 'nghe câu đang chọn'], ['↑ ↓', 'chọn câu']] : [['R', 'nghe câu'], ['Enter', 'nộp câu gõ'], ['Esc', 'thoát ô gõ']]} />
+      <Shortcuts items={mode === 'speak' ? [['S', 'shadow câu đang chọn'], ['Ctrl', 'nghe câu đang chọn'], ['↑ ↓', 'chọn câu']] : [['Ctrl', 'nghe câu'], ['Enter', 'nộp câu gõ'], ['Esc', 'thoát ô gõ']]} />
     </div>
   )
 }

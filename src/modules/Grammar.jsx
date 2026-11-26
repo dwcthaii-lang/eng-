@@ -359,7 +359,7 @@ function FixCard({ step, onDone }) {
           {said != null && !ok && <button className="btn-ghost" onClick={() => onDone({ ok: true, said })}>✔ Mình nói đúng (máy nghe nhầm)</button>}
         </div>
       )}
-      <Shortcuts items={[['Space', 'giữ để nói'], ['R', 'nghe câu đúng'], ['Enter', 'tiếp']]} />
+      <Shortcuts items={[['Space', 'giữ để nói'], ['Ctrl', 'nghe câu đúng'], ['Enter', 'tiếp']]} />
     </div>
   )
 }
@@ -407,7 +407,7 @@ function SpeakCard({ step, onDone }) {
           {!first && <button className="btn-ghost" onClick={() => onDone({ ok: true, aided: hint, said })}>✔ Mình nói đúng (máy nghe nhầm)</button>}
         </div>
       )}
-      <Shortcuts items={[['Space', 'giữ để nói'], ['H', 'gợi ý'], ['R', 'nghe câu mẫu'], ['Enter', 'tiếp']]} />
+      <Shortcuts items={[['Space', 'giữ để nói'], ['H', 'gợi ý'], ['Ctrl', 'nghe câu mẫu'], ['Enter', 'tiếp']]} />
     </div>
   )
 }
@@ -633,7 +633,7 @@ function VerbCard({ v, onDone }) {
           {said != null && !ok && <button className="btn-ghost" onClick={() => onDone(true)}>✔ Mình nói đúng (máy nghe nhầm)</button>}
         </div>
       )}
-      <Shortcuts items={[['Space', 'giữ để nói'], ['R', 'nghe'], ['Enter', 'tiếp']]} />
+      <Shortcuts items={[['Space', 'giữ để nói'], ['Ctrl', 'nghe'], ['Enter', 'tiếp']]} />
     </div>
   )
 }

@@ -279,7 +279,7 @@ function RecallCard({ item, settings, onDone }) {
             </div>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
-            <button className="btn-ghost" onClick={playModel}>🔊 Nghe câu mẫu <span className="kbd">R</span></button>
+            <button className="btn-ghost" onClick={playModel}>🔊 Nghe câu mẫu <span className="kbd">Ctrl</span></button>
             <button className="btn-primary" onClick={next}>Tiếp theo <span className="kbd !bg-indigo-500 !text-white !border-indigo-400">Enter</span></button>
           </div>
           <details className="rounded-xl bg-slate-50 p-3" open={!item.review}>
@@ -291,7 +291,7 @@ function RecallCard({ item, settings, onDone }) {
           <p className="text-xs text-slate-400">Mẹo: nghe câu mẫu rồi nhại lại 1–2 lần (giữ Space) trước khi qua thẻ mới. Chỉ lần nói đầu tiên được tính vào SRS.</p>
         </div>
       )}
-      <Shortcuts items={[['Space (giữ)', 'nói'], ['H', 'gợi ý'], ['R', 'nghe câu mẫu'], ['Enter', 'thẻ tiếp']]} />
+      <Shortcuts items={[['Space (giữ)', 'nói'], ['H', 'gợi ý'], ['Ctrl', 'nghe câu mẫu'], ['Enter', 'thẻ tiếp']]} />
     </div>
   )
 }

@@ -28,8 +28,26 @@ export function useHotkeys(map, enabled = true) {
         fn(e)
       }
     }
+    // Nhấn rồi thả RIÊNG phím Ctrl = nghe lại (hành động của phím R). Dùng được cả khi đang gõ trong ô.
+    let ctrlAlone = false
+    const onCtrlDown = (e) => { ctrlAlone = e.key === 'Control' && !e.repeat ? true : e.key === 'Control' ? ctrlAlone : false }
+    const onCtrlUp = (e) => {
+      if (e.key !== 'Control' || !ctrlAlone) return
+      ctrlAlone = false
+      const fn = ref.current.r || ref.current.Control
+      if (fn) fn(e)
+    }
+    const onMouse = () => { ctrlAlone = false }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onCtrlDown, true)
+    window.addEventListener('keyup', onCtrlUp, true)
+    window.addEventListener('mousedown', onMouse, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onCtrlDown, true)
+      window.removeEventListener('keyup', onCtrlUp, true)
+      window.removeEventListener('mousedown', onMouse, true)
+    }
   }, [enabled])
 }
 
