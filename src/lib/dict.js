@@ -17,7 +17,7 @@ function save(k, v) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)) } catch {}
 }
 
-const POS_VI = { noun: 'danh từ', verb: 'động từ', adjective: 'tính từ', adverb: 'trạng từ', pronoun: 'đại từ', preposition: 'giới từ', conjunction: 'liên từ', interjection: 'thán từ', determiner: 'từ hạn định', exclamation: 'thán từ', phrase: 'cụm từ', idiom: 'thành ngữ', 'phrasal verb': 'cụm động từ' }
+const POS_VI = { other: 'khác', 'phrasal verb': 'cụm động từ',  noun: 'danh từ', verb: 'động từ', adjective: 'tính từ', adverb: 'trạng từ', pronoun: 'đại từ', preposition: 'giới từ', conjunction: 'liên từ', interjection: 'thán từ', determiner: 'từ hạn định', exclamation: 'thán từ', phrase: 'cụm từ', idiom: 'thành ngữ', 'phrasal verb': 'cụm động từ' }
 export const posVi = (p) => POS_VI[String(p || '').toLowerCase()] || p
 
 export function cleanWord(s) {
@@ -89,8 +89,15 @@ export async function lookupWordAI(word, context = '') {
   if (aiWordCache[k]) return aiWordCache[k]
   const r = await askJson(
     'You are an English-Vietnamese learner dictionary for spoken English. Return JSON only.',
-    `Word/phrase: "${word}"\nContext sentence: "${context.slice(0, 300)}"\nReturn JSON: {"vi": "nghĩa tiếng Việt ngắn gọn, đúng nghĩa trong ngữ cảnh", "pos": "part of speech in English", "note_vi": "1 câu: dùng khi nào / sắc thái", "example": "a natural everyday example sentence", "exampleVi": "dịch câu ví dụ tự nhiên"}`,
-    { maxMs: 25000 }
+    `Word/phrase: "${word}"\nContext sentence: "${context.slice(0, 300)}"\nReturn JSON:
+{"vi": "nghĩa tiếng Việt đúng trong NGỮ CẢNH trên (nếu không có ngữ cảnh: nghĩa phổ biến nhất)",
+ "pos": "part of speech in that context (English)",
+ "note_vi": "1 câu: dùng khi nào / sắc thái",
+ "ipaUS": "/…/", "ipaUK": "/…/",
+ "example": "a natural everyday example sentence", "exampleVi": "dịch tự nhiên",
+ "senses": [ALL common meanings of the word (and of its base form), grouped by part of speech — noun, verb, adjective, adverb, phrasal verb, idiom…; 3-10 items; each: {"pos": "noun|verb|adjective|adverb|phrasal verb|idiom|…", "vi": "nghĩa tiếng Việt ngắn gọn", "def": "short simple English definition", "example": "natural example sentence", "exampleVi": "dịch tự nhiên", "inContext": true if this is the meaning used in the context sentence}],
+ "forms": "các dạng từ liên quan, vd: soak (v) · soaking (adj) · soaked (adj)"}`,
+    { maxMs: 30000 }
   )
   if (r?.vi) aiWordCache[k] = { ...r, by: 'AI' }
   return aiWordCache[k] || null

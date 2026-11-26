@@ -3,7 +3,7 @@
 // 2) Bôi chọn một từ/cụm từ trên trang → cửa sổ nhỏ: phiên âm, nghĩa tiếng Việt, loại từ, ví dụ, loa
 // Từ lưu lại → vào kho từ (nguồn 'pron') → có lịch ôn lặp lại ngắt quãng như mọi từ khác.
 import { useEffect, useRef, useState } from 'react'
-import { lookupWord, lookupWordAI, pronounce, posVi, cleanWord } from '../lib/dict'
+import { lookupWord, lookupWordAI, pronounce, posVi, cleanWord, translateText } from '../lib/dict'
 import { aiEnabled } from '../lib/ai'
 import { useStore, update } from '../lib/store'
 import { today, addDays } from '../lib/date'
@@ -100,8 +100,8 @@ export function LookupCard({ word, context = '' }) {
 
   const info = data?.dict
   const vi = data?.local?.vi || (aiInfo?.vi) || data?.vi?.vi
-  const ipaUS = info?.ipaUS || data?.vi?.ipaUS
-  const ipaUK = info?.ipaUK || data?.vi?.ipaUK
+  const ipaUS = info?.ipaUS || aiInfo?.ipaUS
+  const ipaUK = info?.ipaUK || aiInfo?.ipaUK
   const posList = info?.meanings?.map((m) => m.pos) || (aiInfo?.pos ? [aiInfo.pos] : [])
   const aiEx = aiInfo?.example
   const exLocal = data?.local?.ex
@@ -123,18 +123,39 @@ export function LookupCard({ word, context = '' }) {
           {posList.length > 0 && <div className="flex flex-wrap gap-1">{[...new Set(posList)].map((p) => <span key={p} className="chip bg-indigo-50 text-indigo-700">{posVi(p)}</span>)}</div>}
           {exLocal && <Example en={exLocal} />}
           {aiEx && <Example en={aiEx} vi={aiInfo.exampleVi} />}
-          {info?.meanings?.slice(0, 3).map((m) => (
-            <div key={m.pos} className="rounded-lg bg-slate-50 p-2">
-              <div className="text-[11px] font-semibold uppercase text-slate-500">{posVi(m.pos)} · {m.pos}</div>
-              {m.defs.slice(0, 2).map((d, i) => (
-                <div key={i} className="mt-1">
-                  <div className="text-slate-700">• {d.def}</div>
-                  {d.ex && <Example en={d.ex} />}
+          {aiInfo?.forms && <div className="text-xs text-slate-500">🔤 Dạng từ: {aiInfo.forms}</div>}
+          <div className="label pt-1">📚 Các nghĩa của từ (theo loại từ)</div>
+          {aiInfo?.senses?.length ? (
+            groupBy(aiInfo.senses, (x) => String(x.pos || '').toLowerCase()).map(([pos, list]) => (
+              <div key={pos} className="rounded-lg bg-slate-50 p-2">
+                <div className="text-[11px] font-semibold uppercase text-slate-500">{posVi(pos)} · {pos}</div>
+                {list.map((d, i) => (
+                  <div key={i} className={`mt-1 ${d.inContext ? 'rounded-md bg-amber-50 p-1' : ''}`}>
+                    <div><b className="text-slate-800">{i + 1}. {d.vi}</b>{d.inContext && <span className="ml-1 chip bg-amber-100 text-amber-800">nghĩa trong câu này</span>}</div>
+                    {d.def && <div className="text-xs text-slate-500">{d.def}</div>}
+                    {d.example && <Example en={d.example} vi={d.exampleVi} />}
+                  </div>
+                ))}
+              </div>
+            ))
+          ) : (
+            <>
+              {aiInfo?.loading && <div className="text-xs text-indigo-500 animate-pulse">🤖 AI đang soạn đủ các nghĩa bằng tiếng Việt…</div>}
+              {info?.meanings?.map((m) => (
+                <div key={m.pos} className="rounded-lg bg-slate-50 p-2">
+                  <div className="text-[11px] font-semibold uppercase text-slate-500">{posVi(m.pos)} · {m.pos}</div>
+                  {m.defs.slice(0, 3).map((d, i) => (
+                    <div key={i} className="mt-1">
+                      <div className="text-slate-700">{i + 1}. {d.def}</div>
+                      <DefVi en={d.def} />
+                      {d.ex && <Example en={d.ex} />}
+                    </div>
+                  ))}
+                  {m.synonyms.length > 0 && <div className="mt-1 text-xs text-slate-500">≈ {m.synonyms.join(', ')}</div>}
                 </div>
               ))}
-              {m.synonyms.length > 0 && <div className="mt-1 text-xs text-slate-500">≈ {m.synonyms.join(', ')}</div>}
-            </div>
-          ))}
+            </>
+          )}
           {!info && !vi && <div className="text-slate-500">Không tìm thấy trong từ điển (có thể do mất mạng). Bạn vẫn nghe được phát âm ở trên.</div>}
         </>
       )}
@@ -148,6 +169,19 @@ export function LookupCard({ word, context = '' }) {
       </div>
     </div>
   )
+}
+
+function groupBy(arr, key) {
+  const m = new Map()
+  arr.forEach((x) => { const k = key(x) || 'other'; if (!m.has(k)) m.set(k, []); m.get(k).push(x) })
+  return [...m.entries()]
+}
+
+// Nghĩa tiếng Việt của một định nghĩa tiếng Anh (dịch nhanh)
+function DefVi({ en }) {
+  const [vi, setVi] = useState(null)
+  useEffect(() => { let a = true; translateText(en).then((r) => a && r && setVi(r.vi)); return () => { a = false } }, [en])
+  return vi ? <div className="text-xs text-slate-500">→ {vi}</div> : null
 }
 
 function Example({ en, vi }) {
