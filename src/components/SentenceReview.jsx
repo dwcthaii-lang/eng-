@@ -25,6 +25,14 @@ const RULES = [
   { re: /\bvery like\b/gi, fix: () => 'really like', why: 'Không nói “very like”; dùng “really like” hoặc “like … very much”.', type: 'unnatural' },
 ]
 
+// Sửa nhanh không cần mạng (luật lỗi người Việt): trả về lỗi + câu đã sửa
+export function quickFix(text) {
+  const errors = localErrors(text).sort((a, b) => a.offset - b.offset)
+  let corrected = text
+  ;[...errors].sort((a, b) => b.offset - a.offset).forEach((e) => { corrected = corrected.slice(0, e.offset) + e.fix + corrected.slice(e.offset + e.length) })
+  return { errors, corrected }
+}
+
 function localErrors(text) {
   const out = []
   RULES.forEach((r) => {

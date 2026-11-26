@@ -30,7 +30,7 @@ const st = (m) => (stats[m] ||= { ttft: 0, n: 0, failAt: 0, think: 0 })
 function recordOk(model, ms) { const x = st(model); x.ttft = x.n ? Math.round(x.ttft * 0.6 + ms * 0.4) : ms; x.n++; x.failAt = 0; saveStats() }
 // model thua vì chậm: ghi nhận ít nhất bằng thời gian đã chờ → lần sau xếp sau
 function recordSlow(model, ms) { const x = st(model); x.ttft = Math.max(x.ttft, ms); x.n = Math.max(1, x.n); saveStats() }
-function recordFail(model) { st(model).failAt = Date.now(); saveStats() }
+function recordFail(model, status) { st(model).failAt = Date.now(); if (status === 404) st(model).gone = Date.now(); saveStats() }
 export function modelStats() { return stats }
 
 let modelListCache = null
@@ -43,7 +43,10 @@ async function candidateModels(s) {
       if (list.length) { modelListCache = list; try { localStorage.setItem('english-reflex:models', JSON.stringify({ at: Date.now(), key: s.geminiKey.slice(-6), list })) } catch {} }
     }
   }
-  const pool = [...new Set([...(s.geminiModel && s.geminiModel !== 'auto' ? [s.geminiModel] : []), ...(modelListCache || []), 'gemini-3.8-flash', 'gemini-3.8-flash-lite'])]
+  // chỉ dùng model Google thật sự cho phép với key này; model báo 404 (không tồn tại) bị loại 7 ngày
+  const fallback = modelListCache?.length ? [] : ['gemini-flash-latest', 'gemini-flash-lite-latest']
+  const pool = [...new Set([...(s.geminiModel && s.geminiModel !== 'auto' ? [s.geminiModel] : []), ...(modelListCache || []), ...fallback])]
+    .filter((m) => !(stats[m]?.gone && Date.now() - stats[m].gone < 7 * 86400000))
   const now = Date.now()
   const score = (m) => {
     const x = stats[m]
@@ -128,13 +131,14 @@ function geminiStream({ system, user, json = false, onText, temperature = 0.5, m
     const queue = await candidateModels(s)
     const live = new Map()
     let winner = null, finished = false, lastErr = null, hedgeTimer = null
+    const errs = []
     const t0 = Date.now()
     const end = (fn, v) => { if (finished) return; finished = true; clearTimeout(hedgeTimer); clearTimeout(deadline); live.forEach((a) => a.abort()); fn(v) }
     const deadline = setTimeout(() => end(reject, lastErr || new Error(`AI không trả lời trong ${Math.round(maxMs / 1000)} giây.`)), maxMs)
     const launch = () => {
       if (finished || winner) return
       const model = queue.shift()
-      if (!model) { if (!live.size) end(reject, lastErr || new Error('Không có model AI nào dùng được.')); return }
+      if (!model) { if (!live.size) end(reject, new Error(errs.length ? `Chưa có model nào trả lời được – ${errs.join('; ')}` : 'Không có model AI nào dùng được.')); return }
       const a = attemptModel({
         model, key: s.geminiKey, system, user, json, temperature,
         onFirst: (m) => {
@@ -155,7 +159,8 @@ function geminiStream({ system, user, json = false, onText, temperature = 0.5, m
           if (finished || e.message === 'aborted') return
           if (e.fatal) return end(reject, new Error('Gemini: API key không hợp lệ hoặc chưa được bật.'))
           lastErr = e
-          recordFail(model)
+          errs.push(`${model}: ${e.status === 404 ? 'không tồn tại với key này' : e.status === 429 ? 'hết lượt miễn phí (đợi 1 phút)' : e.status === 503 ? 'Google đang quá tải' : String(e.message).slice(0, 60)}`)
+          recordFail(model, e.status)
           if (model === winner) return end(reject, e) // đã đang viết mà đứt giữa chừng
           launch() // lỗi → thử ngay model khác
         }
@@ -284,13 +289,23 @@ Speak naturally like a real person (contractions, casual or academic register as
 
 // Module 3: sửa 3 lỗi diễn đạt tự nhiên nhất + từ bị bí
 export function roleplayFeedback({ scenario, history, stuckWords }) {
-  const convo = history.map((h) => `${h.who === 'ai' ? scenario.aiName : 'Learner'}: ${h.text}`).join('\n')
+  const convo = history.map((h, i) => `${h.who === 'ai' ? scenario.aiName : 'Learner'}: ${h.text}`).join('\n')
+  const lines = history.filter((h) => h.who === 'me').map((h) => h.text)
   return askJson(
-    `You are an English speaking coach. ${LEARNER} Return JSON only.`,
-    `Roleplay: ${scenario.titleVi} (${scenario.setupEn})\n${convo}\nWords the learner needed hints for: ${stuckWords.join(', ') || 'none'}
+    `You are a strict but kind English speaking teacher (IELTS examiner standard). ${LEARNER} All explanations in Vietnamese, concrete: name the rule/collocation, why it is wrong or odd for a native speaker, and how to fix it. Return JSON only.`,
+    `Roleplay: ${scenario.titleVi} (${scenario.setupEn})
+Full conversation:
+${convo}
+Words the learner needed hints for: ${stuckWords.join(', ') || 'none'}
 
-Pick ONLY the 3 most important improvements in the learner's lines (naturalness, register, collocations), not tiny grammar nitpicks. Return JSON:
-{"corrections":[{"said":"learner's original sentence","better":"how a native speaker / academic would say it","why_vi":"short reason in Vietnamese"}], "reactivate":[{"en":"useful chunk the learner lacked","vi":"Vietnamese meaning"}], "summary_vi":"one encouraging sentence in Vietnamese"}`
+Review EVERY learner line below, in order (judge grammar, word choice, naturalness, register AND whether it replies appropriately to what ${scenario.aiName} just said):
+${JSON.stringify(lines)}
+
+Return JSON:
+{"turns":[{"said":"learner line exactly","score":0-10,"verdict_vi":"1 câu: câu này trả lời đúng ý/đúng ngữ cảnh chưa, vấn đề lớn nhất","errors":[{"wrong":"exact words from the line","fix":"correction","type":"grammar|word|usage|unnatural|missing","why_vi":"giải thích ngắn gọn nhưng cụ thể"}],"fixed":"the learner's OWN sentence corrected — keep their idea and wording, only fix what is wrong","better":"how a native speaker would naturally say it here","why_vi":"vì sao cách nói 'better' hay hơn"}],
+ "reactivate":[{"en":"useful chunk the learner lacked","vi":"nghĩa"}],
+ "summary_vi":"2 câu: điểm mạnh + điều quan trọng nhất cần cải thiện"}`,
+    { maxMs: 60000 }
   )
 }
 
