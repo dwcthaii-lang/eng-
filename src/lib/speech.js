@@ -154,3 +154,39 @@ export function useSpeechRecognition({ lang = 'en-US' } = {}) {
 
   return { supported: sttSupported, listening, transcript, interim, error, start, stop, reset, setTranscript }
 }
+
+// Đọc theo giọng Anh-Mỹ ('US') hoặc Anh-Anh ('UK'). Trả về false nếu máy không có giọng phù hợp.
+export function accentVoice(accent) {
+  const lang = accent === 'UK' ? 'en-GB' : 'en-US'
+  const voices = getVoices().filter((v) => v.lang.replace('_', '-').startsWith(lang))
+  return voices.find((v) => /natural|google|online/i.test(v.name)) || voices[0] || null
+}
+
+export function speakAccent(text, accent = 'US', { rate = 1 } = {}) {
+  return new Promise((resolve) => {
+    if (!ttsSupported) return resolve(false)
+    stopSpeaking()
+    const u = new SpeechSynthesisUtterance(text)
+    const v = accentVoice(accent)
+    u.lang = accent === 'UK' ? 'en-GB' : 'en-US'
+    if (v) u.voice = v
+    u.rate = rate
+    u.onend = () => resolve(!!v)
+    u.onerror = () => resolve(!!v)
+    window.speechSynthesis.speak(u)
+  })
+}
+
+// Phát file âm thanh (giọng người thật từ từ điển); lỗi thì trả về false
+export function playAudio(url, rate = 1) {
+  return new Promise((resolve) => {
+    try {
+      stopSpeaking()
+      const a = new Audio(url)
+      a.playbackRate = rate
+      a.onended = () => resolve(true)
+      a.onerror = () => resolve(false)
+      a.play().catch(() => resolve(false))
+    } catch { resolve(false) }
+  })
+}

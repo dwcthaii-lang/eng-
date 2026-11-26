@@ -36,6 +36,11 @@ Mỗi bài đã học (thẻ nói, bài nghe, nhập vai, đoạn dịch, bài n
 ## 📐 Ngữ pháp cho người nói
 Mục **Ngữ pháp** có 15 bài (các thì, câu hỏi, động từ khuyết thiếu, mạo từ, so sánh, câu điều kiện, bị động, V-ing/to V, mệnh đề quan hệ, câu tường thuật, used to). Mỗi bài có ghi chú (khi nào dùng, công thức, dấu hiệu, lỗi người Việt hay mắc, ví dụ), sau đó luyện 3 bước: **chọn đáp án → sửa câu sai → tự nói câu**. Ngoài ra có công cụ **“Chọn thì nào?”**, **bảng tóm tắt các thì** và **67 động từ bất quy tắc**. Mọi bài đều tự vào lịch ôn.
 
+## 🔊 Phát âm & tra từ nhanh
+- Nút **🔊** ở góc phải (hoặc phím **P**): dán từ/câu → nghe giọng **Anh-Mỹ 🇺🇸** hoặc **Anh-Anh 🇬🇧**, đọc chậm 🐢, giữ mic thử đọc để máy chấm.
+- **Bôi đen một từ** bất kỳ trên trang (điện thoại: nhấn giữ) → cửa sổ nhỏ hiện phiên âm, nghĩa tiếng Việt, loại từ, ví dụ và loa phát âm.
+- Bấm **⭐ Lưu để ôn** → từ vào danh sách “Từ hay đọc sai” và được nhắc ôn theo lịch lặp lại ngắt quãng (mục 📅 Ôn tập hôm nay → Ôn phát âm).
+
 ## Thêm bài mới không giới hạn
 **Thư viện bài học → ✨ Tạo bằng AI** (cần API key Gemini miễn phí trong Cài đặt): AI soạn tình huống mới đủ cho cả 3 module theo chủ đề bạn muốn. Có thể xuất/nhập gói bài học .json.
 

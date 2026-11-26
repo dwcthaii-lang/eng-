@@ -9,6 +9,7 @@ import Dashboard from './modules/Dashboard'
 import Review from './modules/Review'
 import Course from './modules/Course'
 import Grammar from './modules/Grammar'
+import { PronounceBar, SelectionLookup, PronReview } from './components/Pronounce'
 import Recall from './modules/Recall'
 import Listening from './modules/Listening'
 import Roleplay from './modules/Roleplay'
@@ -107,13 +108,14 @@ export default function App() {
   useReminder()
   useEffect(() => setMoreOpen(false), [page])
 
-  const moduleKey = { recall: 'recall', listening: 'listening', roleplay: 'roleplay', writing: 'writing', vocab: 'recall', review: 'recall', course: 'course', grammar: 'grammar' }[page]
+  const moduleKey = { recall: 'recall', listening: 'listening', roleplay: 'roleplay', writing: 'writing', vocab: 'recall', review: 'recall', course: 'course', grammar: 'grammar', pron: 'recall' }[page]
   useActiveTime(moduleKey)
 
   let content
   switch (page) {
     case 'review': content = <Review />; break
     case 'course': content = <Course key={(param || 'x') + (param2 || '')} unitId={param} mode={param2} />; break
+    case 'pron': content = <PronReview key={param || 'x'} />; break
     case 'grammar': content = <Grammar key={(param || 'x') + (param2 || '')} id={param} mode={param2} />; break
     case 'recall': content = <Recall key={param || 'x'} mode={param} />; break
     case 'listening': content = <Listening key={param || 'x'} id={param} />; break
@@ -148,6 +150,8 @@ export default function App() {
           })}
         </nav>
       </aside>
+      <PronounceBar />
+      <SelectionLookup />
       <main className="flex-1 px-4 pt-5 pb-24 md:px-10 md:py-8 max-w-5xl">{content}</main>
 
       {/* Điều hướng cho điện thoại */}

@@ -13,6 +13,9 @@ export default function Review() {
   const vocabDue = Object.values(s.vocab).filter((v) => isDue(v, t))
   const recallDue = due.filter((r) => r.type === 'recall')
   const courseDue = courseDueItems(s)
+  const pronDue = vocabDue.filter((v) => v.sources.includes('pron'))
+  const courseIds = new Set(courseDue.map((x) => x.en.toLowerCase()))
+  const recallVocab = vocabDue.filter((v) => !v.sources.includes('pron') && !courseIds.has(v.en.toLowerCase())).length
   const others = due.filter((r) => r.type !== 'recall')
   const all = Object.values(s.reviews)
   const forecast = Array.from({ length: 7 }, (_, i) => {
@@ -55,10 +58,17 @@ export default function Review() {
               <span className="btn-primary">Bắt đầu</span>
             </a>
           )}
-          {(recallDue.length > 0 || vocabDue.length > courseDue.length) && (
+          {pronDue.length > 0 && (
+            <a href="#/pron" className="flex items-center gap-3 rounded-xl bg-amber-50 p-3 hover:bg-amber-100">
+              <span className="text-xl">🔊</span>
+              <span className="flex-1"><b>Ôn phát âm</b> <span className="text-sm text-slate-600">({pronDue.length} từ hay đọc sai) – tự đọc, máy chấm</span></span>
+              <span className="btn-primary">Bắt đầu</span>
+            </a>
+          )}
+          {(recallDue.length > 0 || recallVocab > 0) && (
             <a href="#/recall/review" className="flex items-center gap-3 rounded-xl bg-indigo-50 p-3 hover:bg-indigo-100">
               <span className="text-xl">🗣️</span>
-              <span className="flex-1"><b>Ôn thẻ nói tình huống</b> <span className="text-sm text-slate-600">({recallDue.length} thẻ, {vocabDue.length - courseDue.length} cụm từ) – nói lại không nhìn gợi ý</span></span>
+              <span className="flex-1"><b>Ôn thẻ nói tình huống</b> <span className="text-sm text-slate-600">({recallDue.length} thẻ, {recallVocab} cụm từ) – nói lại không nhìn gợi ý</span></span>
               <span className="btn-primary">Bắt đầu</span>
             </a>
           )}
