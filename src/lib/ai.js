@@ -178,3 +178,25 @@ Give ${count} NEW high-frequency words, collocations, phrasal verbs or short eve
 Return JSON: {"items": [{"en": "word/chunk", "vi": "nghĩa tiếng Việt ngắn gọn", "ex": "one natural spoken example sentence that CONTAINS the exact chunk"}]}`
   )
 }
+
+// Chấm & sửa CẢ CÂU người học nói: lỗi ở đâu, không nên dùng gì, sửa thế nào
+export function reviewSentence({ situationVi = '', context = '', chunks = [], transcript, model = '' }) {
+  return askJson(
+    `You are a strict but friendly English speaking coach. ${LEARNER} Explanations must be in Vietnamese. Return JSON only.`,
+    `Situation (Vietnamese): ${situationVi}
+Context: ${context}
+Target chunks: ${chunks.join('; ')}
+Reference answer: ${model}
+Learner said: "${transcript}"
+
+Review the WHOLE sentence the learner said (not only the chunks). Ignore capitalization and punctuation (speech recognition). Find every real error: grammar (verb form, tense, agreement, articles, prepositions, word order), wrong word choice, unnatural/awkward phrasing, and things a native speaker would avoid. Return JSON:
+{"score": 0-10 overall,
+ "scores": {"grammar": 0-10, "vocab": 0-10, "natural": 0-10, "meaning": 0-10},
+ "errors": [{"wrong": "exact words from learner's sentence", "fix": "corrected words", "type": "grammar|word|unnatural|avoid", "why_vi": "giải thích ngắn bằng tiếng Việt"}],
+ "corrected": "learner's sentence with ONLY the errors fixed (keep their wording)",
+ "natural": "how a native speaker would naturally say it",
+ "avoid_vi": ["điều không nên dùng / thói quen cần bỏ (0-2 items)"],
+ "praise_vi": "1 điểm làm tốt",
+ "tip_vi": "1 mẹo ngắn để nói tốt hơn lần sau"}`
+  )
+}

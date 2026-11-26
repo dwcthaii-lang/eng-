@@ -13,6 +13,7 @@ import { useHotkeys } from '../lib/hotkeys'
 import { today, addDays } from '../lib/date'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { PageHeader, Progress, Shortcuts, SessionTimer } from '../components/ui'
+import { SentenceReview } from '../components/SentenceReview'
 
 const LEVEL_NAMES = {
   1: ['Cấp 1 · Nền tảng để nói hằng ngày', 'Các thì cơ bản và câu hỏi – đủ dùng cho 80% hội thoại.'],
@@ -397,6 +398,7 @@ function SpeakCard({ step, onDone }) {
           {tries > 1 && <div className="mt-1 text-xs text-slate-500">Lần nói lại chỉ để luyện; điểm tính theo lần đầu.</div>}
         </div>
       )}
+      {said != null && <SentenceReview key={said} transcript={said} chunks={step.must} model={step.model} situationVi={step.vi} />}
       {said != null && (
         <div className="flex flex-wrap gap-2">
           <button className="btn-primary" onClick={() => onDone(result())}>Tiếp →</button>

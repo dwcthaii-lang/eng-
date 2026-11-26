@@ -7,7 +7,7 @@ import { getState, update, useStore, logHistory } from '../lib/store'
 import { isDue, recordSpoken, markHeard, vocabId } from '../lib/srs'
 import { localScore, chunkUsed } from '../lib/text'
 import { speak } from '../lib/speech'
-import { aiEnabled, gradeRecall } from '../lib/ai'
+import { SentenceReview } from '../components/SentenceReview'
 import { useHotkeys } from '../lib/hotkeys'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { PageHeader, SessionTimer, TierChip, Shortcuts, Progress } from '../components/ui'
@@ -164,7 +164,7 @@ function RecallCard({ item, settings, onDone }) {
   const evaluate = useCallback(
     async (transcript) => {
       const local = localScore({ transcript, chunks, model: isWord ? '' : p.model })
-      setAnswer({ transcript, local, ai: null, loading: !!aiEnabled() })
+      setAnswer({ transcript, local, review: null })
       if (!recorded) {
         setRecorded(true)
         chunks.forEach((c) => recordSpoken(c, { correct: chunkUsed(c, transcript), aided: hintShown }))
@@ -182,14 +182,6 @@ function RecallCard({ item, settings, onDone }) {
           scheduleReview('recall', p.id, grade, `${p.emoji} ${p.titleVi}`)
         }
       }
-      if (aiEnabled() && !isWord) {
-        try {
-          const ai = await gradeRecall({ situationVi: p.vi, context: p.context, chunks, transcript, model: p.model })
-          setAnswer((a) => ({ ...a, ai, loading: false }))
-        } catch (e) {
-          setAnswer((a) => ({ ...a, aiError: String(e.message || e), loading: false }))
-        }
-      }
     },
     [chunks, hintShown, isWord, p, recorded]
   )
@@ -203,7 +195,7 @@ function RecallCard({ item, settings, onDone }) {
   }
   const next = () => {
     if (!answer) return
-    const score = answer.ai?.score ?? answer.local.score
+    const score = answer.review ?? answer.local.score
     logHistory('recall', `${isWord ? item.word.en : p.titleVi}: ${score}/10`)
     onDone({ title: isWord ? item.word.en : `${p.emoji} ${p.titleVi}`, score })
   }
@@ -259,7 +251,7 @@ function RecallCard({ item, settings, onDone }) {
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <div className="label">Kết quả</div>
-            <div className="text-2xl font-bold">{answer.ai?.score ?? answer.local.score}<span className="text-base text-slate-400">/10</span></div>
+            <div className="text-2xl font-bold" title="Điểm cả câu: cụm từ + ngữ pháp + độ tự nhiên">{answer.review ?? answer.local.score}<span className="text-base text-slate-400">/10</span></div>
           </div>
           <div className="text-sm">
             <span className="text-slate-500">Bạn nói: </span>“{answer.transcript}”
@@ -268,14 +260,15 @@ function RecallCard({ item, settings, onDone }) {
             ✅ Đã dùng: {answer.local.used.length ? answer.local.used.join(', ') : '—'}
             {answer.local.missing.length > 0 && <span className="ml-3 text-rose-600">✗ Chưa dùng: {answer.local.missing.join(', ')}</span>}
           </div>
-          {answer.loading && <div className="text-sm text-slate-500">🤖 AI đang chấm ngữ nghĩa…</div>}
-          {answer.aiError && <div className="text-sm text-rose-600">AI lỗi: {answer.aiError}</div>}
-          {answer.ai && (
-            <div className="rounded-xl bg-indigo-50 p-3 text-sm space-y-1">
-              <div><b>Tự nhiên hơn:</b> {answer.ai.natural}</div>
-              <div className="text-slate-600">{answer.ai.feedback_vi}</div>
-            </div>
-          )}
+          <SentenceReview
+            key={answer.transcript}
+            transcript={answer.transcript}
+            chunks={chunks}
+            model={isWord ? '' : p.model}
+            situationVi={isWord ? `Dùng cụm “${item.word.en}” (${item.word.vi || ''}) trong một câu` : p.vi}
+            context={isWord ? '' : p.context}
+            onScore={(sc) => setAnswer((a) => (a && a.transcript === answer.transcript ? { ...a, review: sc } : a))}
+          />
           {!isWord && (
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <span className="text-slate-500">Câu mẫu: </span>

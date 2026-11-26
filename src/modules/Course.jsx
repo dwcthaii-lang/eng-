@@ -14,6 +14,7 @@ import { today } from '../lib/date'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { ChunkCluster } from '../components/ChunkCluster'
 import { SentenceVi } from '../components/SentenceVi'
+import { SentenceReview } from '../components/SentenceReview'
 import { translateText } from '../lib/dict'
 import { PageHeader, Progress, Shortcuts, SessionTimer, StageChip } from '../components/ui'
 
@@ -390,6 +391,7 @@ function SayCard({ item, settings, aidedByDefault, onDone }) {
           {ans.retry && <div className="text-sm"><span className="text-slate-500">Lần nói lại:</span> “{ans.retry}” {ans.retryOk ? '✅' : ''}</div>}
           <div className="text-lg"><b className="text-indigo-700">{item.en}</b> – “{item.ex}” <button onClick={play}>🔈</button></div>
           <SentenceVi en={item.ex} vi={item.exVi} />
+          <SentenceReview key={ans.t} transcript={ans.t} chunks={[item.en]} model={item.ex} situationVi={`Nói một câu dùng “${item.en}” (${item.vi})`} />
           <div className="flex gap-2">
             <button className="btn-ghost" onClick={play}>🔊 Nghe <span className="kbd">R</span></button>
             <button className="btn-primary" onClick={next}>Tiếp <span className="kbd !bg-indigo-500 !text-white !border-indigo-400">Enter</span></button>

@@ -16,6 +16,8 @@ export async function checkGrammar(text) {
     message: m.message,
     replacements: (m.replacements || []).slice(0, 3).map((r) => r.value),
     type: m.rule?.issueType || 'grammar',
+    rule: m.rule?.id || '',
+    category: m.rule?.category?.id || '',
   }))
 }
 
