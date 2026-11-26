@@ -160,3 +160,48 @@ export async function translateText(en) {
   }
   return out
 }
+
+// Dịch TỰ NHIÊN bằng AI theo ngữ cảnh: gom các câu cùng ngữ cảnh (cả đoạn hội thoại) vào 1 lần gọi
+const natQ = new Map() // ctx -> { list: [en], waiters: Map(en -> [resolve]), timer }
+export function translateNatural(en, ctx = '') {
+  const key = en.trim()
+  if (!key) return Promise.resolve(null)
+  if (tr[key]?.by === 'AI') return Promise.resolve(tr[key])
+  if (!aiEnabled()) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    let g = natQ.get(ctx)
+    if (!g) natQ.set(ctx, (g = { list: [], waiters: new Map(), timer: null }))
+    if (!g.waiters.has(key)) { g.waiters.set(key, []); g.list.push(key) }
+    g.waiters.get(key).push(resolve)
+    clearTimeout(g.timer)
+    g.timer = setTimeout(() => flushNatural(ctx), 80)
+  })
+}
+
+async function flushNatural(ctx) {
+  const g = natQ.get(ctx)
+  natQ.delete(ctx)
+  if (!g) return
+  for (let i = 0; i < g.list.length; i += 30) {
+    const batch = g.list.slice(i, i + 30)
+    let out = []
+    try {
+      const r = await askJson(
+        `You are a professional English→Vietnamese subtitle translator. Translate into natural, idiomatic SPOKEN Vietnamese — exactly how a Vietnamese person would say it in that situation, NOT word-for-word.
+- Keep the tone (casual between friends/roommates, polite with professors/staff). Between peers use "mình/cậu" or "mình/bạn" consistently; use natural particles (nhé, à, nhỉ, đấy, thôi, mà) where a Vietnamese speaker would.
+- Translate idioms and fillers by meaning: "Will do" → "Ok, để mình làm", "Cool" → "Ok"/"Được đó", "kinda" → "kiểu như"/"hơi", "Lemme know" → "Báo mình nhé", "heads-up" → "báo trước", "Seriously?" → "Thật á?".
+- Keep technical terms commonly used in Vietnamese labs (wafer, SEM, cleanroom…) if Vietnamese engineers would say them in English.
+- Short, smooth sentences; no explanations. Return JSON only: {"vi": ["…", …]} with exactly the same number and order as the input lines.`,
+        `Context / full conversation (for meaning and tone):\n${ctx || '(none)'}\n\nLines to translate (JSON array):\n${JSON.stringify(batch)}`
+      )
+      out = Array.isArray(r?.vi) ? r.vi : []
+    } catch {}
+    batch.forEach((en, j) => {
+      const vi = out[j] && String(out[j]).trim()
+      const res = vi ? { vi, by: 'AI' } : null
+      if (res) tr[en] = res
+      ;(g.waiters.get(en) || []).forEach((fn) => fn(res))
+    })
+    try { localStorage.setItem(TR_KEY, JSON.stringify(tr)) } catch {}
+  }
+}

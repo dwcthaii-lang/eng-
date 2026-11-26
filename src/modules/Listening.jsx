@@ -7,7 +7,10 @@ import { update, useStore, logHistory } from '../lib/store'
 import { speakLines, speak, stopSpeaking, useSpeechRecognition } from '../lib/speech'
 import { parseLine, plainLine, intonation, sameAnswer, similarity, normalize } from '../lib/text'
 import { SentenceVi } from '../components/SentenceVi'
-import { translateText } from '../lib/dict'
+import { translateText, translateNatural } from '../lib/dict'
+
+// Ngữ cảnh cả đoạn hội thoại để AI dịch tự nhiên, đúng giọng điệu
+const dialogCtx = (sit) => `${sit.titleVi} (${sit.title || ''}). Speakers: ${Object.entries(sit.listening.speakers || {}).map(([k, v]) => `${k} = ${v}`).join(', ')}.\n` + sit.listening.lines.map((l) => `${l.s}: ${plainLine(l.t)}`).join('\n')
 import { markHeard } from '../lib/srs'
 import { aiEnabled, gradeSummary } from '../lib/ai'
 import { useHotkeys } from '../lib/hotkeys'
@@ -304,7 +307,7 @@ function GapStep({ sit, settings, playAll, stop, playingLine, onNext }) {
                   </span>
                 )
               })}
-              {checked && <SentenceVi en={plainLine(L.lines[li].t)} className="!text-sm leading-6" />}
+              {checked && <SentenceVi en={plainLine(L.lines[li].t)} ctx={dialogCtx(sit)} className="!text-sm leading-6" />}
             </div>
           </div>
         ))}
@@ -367,7 +370,7 @@ function ShadowStep({ sit, settings, onDone }) {
   const [running, setRunning] = useState(false)
   const [mode, setMode] = useState('speak') // speak = shadow bằng mic · type = nghe rồi gõ lại (chính tả)
   const rec = useSpeechRecognition()
-  useEffect(() => { L.lines.forEach((l) => translateText(plainLine(l.t))) }, [L])
+  useEffect(() => { L.lines.forEach((l) => { translateText(plainLine(l.t)); translateNatural(plainLine(l.t), dialogCtx(sit)) }) }, [L])
   const submitTyped = (i, text) => {
     const sc = Math.round(similarity(text, plainLine(L.lines[i].t)) * 100)
     setScores((s) => ({ ...s, [i]: { sc, said: text, typed: true } }))
@@ -439,7 +442,7 @@ function ShadowStep({ sit, settings, onDone }) {
               <div className={mode === 'type' && !scores[i] ? 'select-none blur-sm' : ''} data-no-lookup={mode === 'type' && !scores[i] ? '' : undefined}>
                 {mode === 'type' && scores[i]?.typed ? <DiffLine model={plainLine(l.t)} typed={scores[i].said} /> : <StressedLine text={l.t} />} <span className="text-indigo-500 font-bold">{intonation(l.t)}</span>
               </div>
-              {(mode === 'speak' || scores[i]) && <SentenceVi en={plainLine(l.t)} className="!text-sm" />}
+              {(mode === 'speak' || scores[i]) && <SentenceVi en={plainLine(l.t)} ctx={dialogCtx(sit)} className="!text-sm" />}
               {scores[i] && (
                 <div className="mt-1 text-xs text-slate-500">
                   <span className={`font-semibold ${scores[i].sc >= 75 ? 'text-emerald-600' : scores[i].sc >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>{scores[i].sc}%</span> · {scores[i].typed ? 'bạn gõ' : 'mic nghe được'}: “{scores[i].said || '—'}”

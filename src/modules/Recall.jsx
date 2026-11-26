@@ -274,7 +274,7 @@ function RecallCard({ item, settings, onDone }) {
             <div className="rounded-xl bg-slate-50 p-3 text-sm">
               <span className="text-slate-500">Câu mẫu: </span>
               <b>{p.model}</b> <button onClick={playModel} className="text-slate-400 hover:text-indigo-600">🔈</button>
-              <SentenceVi en={p.model} vi={p.modelVi} className="mt-1 !text-sm" />
+              <SentenceVi en={p.model} vi={p.modelVi} ctx={`Tình huống: ${p.vi} (${p.context || ''})`} className="mt-1 !text-sm" />
             </div>
           )}
           <div className="flex flex-wrap gap-2 pt-1">

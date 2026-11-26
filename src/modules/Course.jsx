@@ -15,7 +15,8 @@ import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/M
 import { ChunkCluster } from '../components/ChunkCluster'
 import { SentenceVi } from '../components/SentenceVi'
 import { SentenceReview } from '../components/SentenceReview'
-import { translateText } from '../lib/dict'
+import { translateText, translateNatural } from '../lib/dict'
+const exCtx = (i) => `Independent everyday spoken example sentences for learning vocabulary (topic: ${i.unitId}). Translate each sentence on its own; casual friendly tone.`
 import { PageHeader, Progress, Shortcuts, SessionTimer, StageChip } from '../components/ui'
 
 const src = (unitId) => `course:${unitId}`
@@ -240,7 +241,7 @@ function Practice({ title, unit, items, learnFirst = false, reviewMode = false, 
   const [results, setResults] = useState([])
 
   // Dịch trước các câu ví dụ để hiện nghĩa ngay khi mở thẻ
-  useEffect(() => { if (getState().settings.showSentenceVi) queue.forEach((i) => !i.exVi && translateText(i.ex)) }, [queue])
+  useEffect(() => { if (getState().settings.showSentenceVi) queue.forEach((i) => { if (!i.exVi) { translateText(i.ex); translateNatural(i.ex, exCtx(i)) } }) }, [queue])
 
   // Khi bắt đầu học: đưa từ vào kho từ để có lịch ôn
   useEffect(() => {
@@ -339,7 +340,7 @@ function LearnCard({ item, settings, onNext }) {
         </div>
         <div className="rounded-xl bg-slate-50 p-3 text-lg">
           <div>“{item.ex}” <button onClick={play} className="ml-1 text-slate-400 hover:text-indigo-600">🔈</button></div>
-          <SentenceVi en={item.ex} vi={item.exVi} className="mt-1" />
+          <SentenceVi en={item.ex} vi={item.exVi} ctx={exCtx(item)} className="mt-1" />
         </div>
         <ChunkCluster en={item.en} vi={item.vi} compact />
       </div>
@@ -390,7 +391,7 @@ function SayCard({ item, settings, aidedByDefault, onDone }) {
           <div className="text-sm"><span className="text-slate-500">Bạn nói:</span> “{ans.t}”</div>
           {ans.retry && <div className="text-sm"><span className="text-slate-500">Lần nói lại:</span> “{ans.retry}” {ans.retryOk ? '✅' : ''}</div>}
           <div className="text-lg"><b className="text-indigo-700">{item.en}</b> – “{item.ex}” <button onClick={play}>🔈</button></div>
-          <SentenceVi en={item.ex} vi={item.exVi} />
+          <SentenceVi en={item.ex} vi={item.exVi} ctx={exCtx(item)} />
           <SentenceReview key={ans.t} transcript={ans.t} chunks={[item.en]} model={item.ex} situationVi={`Nói một câu dùng “${item.en}” (${item.vi})`} />
           <div className="flex gap-2">
             <button className="btn-ghost" onClick={play}>🔊 Nghe <span className="kbd">R</span></button>
