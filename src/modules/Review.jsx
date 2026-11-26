@@ -4,6 +4,7 @@ import { REVIEW_TYPES, dueReviews } from '../lib/review'
 import { isDue } from '../lib/srs'
 import { today, addDays, daysBetween } from '../lib/date'
 import { PageHeader } from '../components/ui'
+import { courseDueItems } from './Course'
 
 export default function Review() {
   const s = useStore()
@@ -11,6 +12,7 @@ export default function Review() {
   const due = dueReviews(s, t)
   const vocabDue = Object.values(s.vocab).filter((v) => isDue(v, t))
   const recallDue = due.filter((r) => r.type === 'recall')
+  const courseDue = courseDueItems(s)
   const others = due.filter((r) => r.type !== 'recall')
   const all = Object.values(s.reviews)
   const forecast = Array.from({ length: 7 }, (_, i) => {
@@ -24,11 +26,12 @@ export default function Review() {
     <div>
       <PageHeader title="📅 Ôn tập hôm nay" subtitle="Lặp lại ngắt quãng: mỗi bài bạn đã học sẽ quay lại đúng lúc sắp quên (1 → 3 → 7 → 15 → 30+ ngày). Nhớ tốt thì giãn lịch ra, quên thì ôn lại sớm." />
 
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 mb-4">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-5 mb-4">
         {[
           ['🗣️ Thẻ nói', recallDue.length],
           ['📚 Cụm từ', vocabDue.length],
           ['🎧 Nghe', due.filter((r) => r.type === 'listening').length],
+          ['🧭 Chủ đề từ vựng', due.filter((r) => r.type === 'unit').length],
           ['⏱️ Nhập vai + ✍️ Dịch', due.filter((r) => r.type === 'roleplay' || r.type === 'translate').length],
         ].map(([k, v]) => (
           <div key={k} className={`card !p-4 ${v ? 'border-rose-200' : ''}`}><div className="text-sm text-slate-500">{k}</div><div className={`text-3xl font-bold ${v ? 'text-rose-600' : 'text-emerald-600'}`}>{v}</div></div>
@@ -44,10 +47,17 @@ export default function Review() {
       ) : (
         <div className="card mb-4 space-y-3">
           <div className="label">Thứ tự gợi ý</div>
-          {(recallDue.length > 0 || vocabDue.length > 0) && (
+          {courseDue.length > 0 && (
+            <a href="#/course/review" className="flex items-center gap-3 rounded-xl bg-emerald-50 p-3 hover:bg-emerald-100">
+              <span className="text-xl">🧭</span>
+              <span className="flex-1"><b>Ôn từ vựng lộ trình</b> <span className="text-sm text-slate-600">({courseDue.length} từ) – nói lại cả câu khi từ bị che</span></span>
+              <span className="btn-primary">Bắt đầu</span>
+            </a>
+          )}
+          {(recallDue.length > 0 || vocabDue.length > courseDue.length) && (
             <a href="#/recall/review" className="flex items-center gap-3 rounded-xl bg-indigo-50 p-3 hover:bg-indigo-100">
               <span className="text-xl">🗣️</span>
-              <span className="flex-1"><b>1. Ôn thẻ nói & cụm từ</b> <span className="text-sm text-slate-600">({recallDue.length} thẻ, {vocabDue.length} cụm từ) – nói lại không nhìn gợi ý</span></span>
+              <span className="flex-1"><b>Ôn thẻ nói tình huống</b> <span className="text-sm text-slate-600">({recallDue.length} thẻ, {vocabDue.length - courseDue.length} cụm từ) – nói lại không nhìn gợi ý</span></span>
               <span className="btn-primary">Bắt đầu</span>
             </a>
           )}

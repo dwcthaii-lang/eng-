@@ -9,6 +9,7 @@ export const REVIEW_TYPES = {
   listening: { label: 'Bài nghe', icon: '🎧', href: (r) => `#/listening/${r.refId}` },
   roleplay: { label: 'Nhập vai', icon: '⏱️', href: (r) => `#/roleplay/${r.refId}` },
   translate: { label: 'Dịch Việt→Anh', icon: '✍️', href: (r) => `#/writing/translate/${r.refId}` },
+  unit: { label: 'Chủ đề từ vựng', icon: '🧭', href: (r) => `#/course/${r.refId}/review` },
 }
 
 export function reviewKey(type, refId) {

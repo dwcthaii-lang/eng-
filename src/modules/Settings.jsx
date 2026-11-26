@@ -168,6 +168,9 @@ export default function Settings() {
           <Field label={`Số thẻ mỗi phiên Module 1: ${s.recallSessionSize}`}>
             <input type="range" min="5" max="20" step="1" value={s.recallSessionSize} onChange={(e) => set({ recallSessionSize: Number(e.target.value) })} className="w-full" />
           </Field>
+          <Field label={`Từ MỚI/ngày (Lộ trình từ vựng): ${s.newWordsPerDay}`} hint="15 từ/ngày ≈ 3000 từ trong ~7 tháng">
+            <input type="range" min="5" max="40" step="5" value={s.newWordsPerDay} onChange={(e) => set({ newWordsPerDay: Number(e.target.value) })} className="w-full" />
+          </Field>
           <Field label={`Thẻ nói MỚI tối đa/ngày: ${s.newRecallPerDay}`} hint="Giới hạn học mới để luôn còn sức ôn bài cũ">
             <input type="range" min="2" max="20" step="1" value={s.newRecallPerDay} onChange={(e) => set({ newRecallPerDay: Number(e.target.value) })} className="w-full" />
           </Field>

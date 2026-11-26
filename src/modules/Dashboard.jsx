@@ -8,6 +8,7 @@ import { dueReviews } from '../lib/review'
 import { PageHeader, Progress } from '../components/ui'
 
 const PLAN = [
+  { key: 'course', label: 'Lộ trình từ vựng', min: 15, href: '#/course', icon: '🧭' },
   { key: 'recall', label: 'Từ vựng chủ động', min: 20, href: '#/recall', icon: '🗣️' },
   { key: 'listening', label: 'Nghe cai phụ đề', min: 25, href: '#/listening', icon: '🎧' },
   { key: 'roleplay', label: 'Nhập vai phản xạ', min: 30, href: '#/roleplay', icon: '⏱️' },
@@ -97,7 +98,7 @@ export default function Dashboard() {
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <div className="card">
-          <div className="label mb-3">Lộ trình 90 phút hôm nay</div>
+          <div className="label mb-3">Lộ trình hôm nay</div>
           <div className="space-y-3">
             {PLAN.map((p) => {
               const m = fmtMin(todayRec[p.key])
@@ -153,7 +154,7 @@ export default function Dashboard() {
             {s.history.slice(0, 8).map((h, i) => (
               <div key={i} className="flex gap-3">
                 <span className="w-28 shrink-0 text-slate-400">{new Date(h.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
-                <span>{{ recall: '🗣️', listening: '🎧', roleplay: '⏱️', writing: '✍️', translate: '✍️' }[h.module]} {h.detail}</span>
+                <span>{{ recall: '🗣️', listening: '🎧', roleplay: '⏱️', writing: '✍️', translate: '✍️', course: '🧭' }[h.module]} {h.detail}</span>
               </div>
             ))}
           </div>

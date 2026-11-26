@@ -7,6 +7,7 @@ import { getSeedVocabEntries } from './data'
 import { stopSpeaking } from './lib/speech'
 import Dashboard from './modules/Dashboard'
 import Review from './modules/Review'
+import Course from './modules/Course'
 import Recall from './modules/Recall'
 import Listening from './modules/Listening'
 import Roleplay from './modules/Roleplay'
@@ -19,6 +20,7 @@ import Settings from './modules/Settings'
 const NAV = [
   { path: '', label: 'Tổng quan', short: 'Tổng quan', icon: '📊', hint: 'M4', main: true },
   { path: 'review', label: 'Ôn tập hôm nay', short: 'Ôn tập', icon: '📅', hint: 'SRS', main: true },
+  { path: 'course', label: 'Lộ trình từ vựng', short: 'Lộ trình', icon: '🧭', hint: 'A2→C1', main: true },
   { path: 'recall', label: 'Từ vựng chủ động', short: 'Nói', icon: '🗣️', hint: 'M1 · 20′', main: true },
   { path: 'listening', label: 'Nghe cai phụ đề', short: 'Nghe', icon: '🎧', hint: 'M2 · 25′', main: true },
   { path: 'roleplay', label: 'Nhập vai phản xạ', short: 'Nhập vai', icon: '⏱️', hint: 'M3 · 30′', main: true },
@@ -103,12 +105,13 @@ export default function App() {
   useReminder()
   useEffect(() => setMoreOpen(false), [page])
 
-  const moduleKey = { recall: 'recall', listening: 'listening', roleplay: 'roleplay', writing: 'writing', vocab: 'recall', review: 'recall' }[page]
+  const moduleKey = { recall: 'recall', listening: 'listening', roleplay: 'roleplay', writing: 'writing', vocab: 'recall', review: 'recall', course: 'course' }[page]
   useActiveTime(moduleKey)
 
   let content
   switch (page) {
     case 'review': content = <Review />; break
+    case 'course': content = <Course key={(param || 'x') + (param2 || '')} unitId={param} mode={param2} />; break
     case 'recall': content = <Recall key={param || 'x'} mode={param} />; break
     case 'listening': content = <Listening key={param || 'x'} id={param} />; break
     case 'roleplay': content = <Roleplay key={param || 'x'} id={param} />; break
@@ -156,7 +159,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 grid grid-cols-6 border-t border-slate-200 bg-white/95 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 grid grid-cols-7 border-t border-slate-200 bg-white/95 backdrop-blur" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {NAV.filter((n) => n.main).map((n) => {
           const active = (page || '') === n.path
           return (

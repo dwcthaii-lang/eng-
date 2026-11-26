@@ -30,6 +30,9 @@ Dữ liệu trên điện thoại và máy tính là riêng. Muốn chuyển: **
 ## Ôn tập (lặp lại ngắt quãng)
 Mỗi bài đã học (thẻ nói, bài nghe, nhập vai, đoạn dịch) và mỗi cụm từ đều có lịch ôn riêng: 1 → 3 → 7 → 15 → 30+ ngày; nhớ tốt thì giãn ra, quên thì ôn sớm. Mở **📅 Ôn tập hôm nay** mỗi ngày trước khi học bài mới. Bật nhắc ở **Cài đặt → Nhắc ôn hằng ngày** (thông báo trình duyệt + file lịch .ics cho Google Calendar).
 
+## 🧭 Lộ trình từ vựng (Đời sống → IELTS 6.5)
+510 từ/cụm từ thông dụng chia 34 chủ đề, 4 cấp: Nền tảng (A2) → Giao tiếp hằng ngày (B1) → IELTS Speaking 6.0–6.5 (B2) → Nâng cao 7+ (C1). Học 5 từ/lượt: nghe & nhại câu ví dụ → nói lại cả câu khi từ bị che. Cấp sau mở khi nói được 70% cấp trước. Có API key thì mỗi chủ đề thêm được từ mới không giới hạn.
+
 ## Thêm bài mới không giới hạn
 **Thư viện bài học → ✨ Tạo bằng AI** (cần API key Gemini miễn phí trong Cài đặt): AI soạn tình huống mới đủ cho cả 3 module theo chủ đề bạn muốn. Có thể xuất/nhập gói bài học .json.
 

@@ -19,7 +19,9 @@ export const defaultSettings = {
   newLessonsPerDay: 2, // số bài nghe/nhập vai MỚI gợi ý mỗi ngày
   reminderOn: false,
   reminderTime: '20:00',
-  grammarCheck: true, // dùng LanguageTool miễn phí để sửa ngữ pháp
+  grammarCheck: true,
+  newWordsPerDay: 15, // số từ MỚI tối đa/ngày trong Lộ trình từ vựng
+  courseUnlocked: 1, // cấp độ cao nhất đã mở khoá thủ công // dùng LanguageTool miễn phí để sửa ngữ pháp
 }
 
 const initial = {
@@ -36,6 +38,7 @@ const initial = {
   translations: {}, // đoạn dịch: id -> { attempts, last }
   enrich: {}, // vocabId -> dữ liệu mở rộng do AI tạo
   lastNotified: '',
+  courseExtra: {}, // unitId -> [{en, vi, ex}] do AI thêm
 }
 
 function load() {

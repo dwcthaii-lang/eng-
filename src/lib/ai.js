@@ -167,3 +167,14 @@ Listening line markup rules (IMPORTANT):
 Natural, real-life language, 30-60 seconds of audio.`
   )
 }
+
+// Thêm từ/cụm từ mới cho một chủ đề của Lộ trình từ vựng
+export function generateUnitItems({ title, levelName, existing, count = 15 }) {
+  return askJson(
+    `You are an English vocabulary curriculum designer focusing on natural spoken British/American English. ${LEARNER} Return JSON only.`,
+    `Topic: "${title}" — level: ${levelName}.
+Already learned (do NOT repeat): ${existing.join('; ')}
+Give ${count} NEW high-frequency words, collocations, phrasal verbs or short everyday sentences that native speakers really use for this topic at this level.
+Return JSON: {"items": [{"en": "word/chunk", "vi": "nghĩa tiếng Việt ngắn gọn", "ex": "one natural spoken example sentence that CONTAINS the exact chunk"}]}`
+  )
+}
