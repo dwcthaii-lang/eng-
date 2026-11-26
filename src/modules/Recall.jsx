@@ -75,7 +75,7 @@ export default function Recall({ mode: routeMode }) {
           <div>
             <div className="label mb-2">Chủ đề</div>
             <div className="flex flex-wrap gap-2">
-              {[['all', 'Cả hai tầng'], ['1', TIERS[1].label], ['2', TIERS[2].label]].map(([k, l]) => (
+              {[['all', 'Tất cả các tầng'], ['1', TIERS[1].label], ['2', TIERS[2].label], ['3', TIERS[3].label]].map(([k, l]) => (
                 <button key={k} onClick={() => setTier(k)} className={tier === k ? 'btn-primary' : 'btn-ghost'}>{l}</button>
               ))}
             </div>

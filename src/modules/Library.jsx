@@ -1,6 +1,6 @@
 // Thư viện bài học: xem tất cả tình huống, tạo thêm không giới hạn bằng AI, nhập/xuất gói bài học
 import { useRef, useState } from 'react'
-import { useSituations, TIERS, baseSituations } from '../data'
+import { useSituations, TIERS, TIER_IDS, baseSituations, randomTopic } from '../data'
 import { useStore, update, logHistory } from '../lib/store'
 import { nextDueLabel } from '../lib/review'
 import { aiEnabled, generateSituation } from '../lib/ai'
@@ -11,7 +11,7 @@ import { PageHeader, TierChip } from '../components/ui'
 // Kiểm tra & chuẩn hoá một tình huống (từ AI hoặc file)
 export function normalizeSituation(raw, tier) {
   const id = raw.id && !baseSituations.some((b) => b.id === raw.id) ? String(raw.id) : `custom-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
-  const t = Number(raw.tier || tier) === 2 ? 2 : 1
+  const t = [1, 2, 3].includes(Number(raw.tier || tier)) ? Number(raw.tier || tier) : 1
   const recall = (raw.recall || []).slice(0, 4).map((r, i) => ({
     id: `${id}-${i + 1}`, vi: String(r.vi || ''), context: String(r.context || ''),
     chunks: (r.chunks || []).slice(0, 4).map((c) => ({ en: String(c.en || ''), vi: String(c.vi || '') })).filter((c) => c.en),
@@ -53,7 +53,8 @@ export default function Library() {
     setBusy(true)
     setMsg('')
     try {
-      const raw = await generateSituation({ tier, topicVi: topic })
+      const titles = situations.map((x) => `${x.titleVi} (${x.title})`)
+      const raw = await generateSituation({ tier, topicVi: topic || randomTopic(tier, titles), avoid: titles })
       const sit = normalizeSituation(raw, tier)
       update((s) => { s.customSituations.push(sit) })
       logHistory('recall', `Tạo tình huống mới: ${sit.titleVi}`)
@@ -112,7 +113,7 @@ export default function Library() {
         {aiEnabled() ? (
           <>
             <div className="flex flex-wrap gap-2">
-              {[1, 2].map((k) => <button key={k} onClick={() => setTier(k)} className={tier === k ? 'btn-primary !py-1' : 'btn-ghost !py-1'}>{TIERS[k].label}</button>)}
+              {TIER_IDS.map((k) => <button key={k} onClick={() => setTier(k)} className={tier === k ? 'btn-primary !py-1' : 'btn-ghost !py-1'}>{TIERS[k].label}</button>)}
             </div>
             <input className="input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Chủ đề bạn muốn (tuỳ chọn), vd: mượn xe máy của bạn, hỏi giáo sư về học bổng, máy ALD báo lỗi nhiệt độ…" />
             <button className="btn-primary" onClick={create} disabled={busy}>{busy ? <>⏳ AI đang soạn bài…<Elapsed /></> : '✨ Tạo bằng AI'}</button>

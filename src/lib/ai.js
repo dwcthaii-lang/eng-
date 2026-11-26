@@ -1,5 +1,6 @@
 // Gọi Gemini / OpenAI trực tiếp từ trình duyệt (API key lưu cục bộ trong LocalStorage)
 import { getState } from './store'
+import { TIER_AI } from '../data'
 
 export function aiEnabled() {
   const s = getState().settings
@@ -597,12 +598,50 @@ export function lookupPhrase({ phrase, context }) {
   )
 }
 
+// Sinh đoạn dịch Việt → Anh mới (học không giới hạn)
+export function generateTranslation({ tier, topicVi, avoid = [] }) {
+  return askJson(
+    `You write Vietnamese→English translation exercises. ${LEARNER} Return JSON only.`,
+    `Create ONE new short paragraph (3-5 sentences, 50-90 Vietnamese words) for tier ${tier}: ${TIER_AI[tier] || TIER_AI[1]}.
+Topic (Vietnamese, may be empty → choose a realistic, useful one): "${topicVi || ''}"
+Already existing exercises (must be DIFFERENT): ${avoid.slice(-40).join('; ') || 'none'}
+The Vietnamese must sound like a real message/speech a Vietnamese student would write or say (natural Vietnamese, not translated-sounding). The English must be natural, idiomatic, the way a fluent speaker would say it${tier === 3 ? ' in a professional setting' : ''}.
+Return JSON: {"titleVi": "tiêu đề ngắn", "vi": "đoạn tiếng Việt", "en": "natural English translation", "glossary": [["cụm tiếng Việt khó", "natural English chunk used in 'en'"], … 5 items]}`,
+    { maxMs: 60000, temperature: 0.8 }
+  )
+}
+
+// Sinh bài đọc ngắn mới (Đọc chủ động)
+export function generateReading({ tier, topicVi, avoid = [] }) {
+  return askJson(
+    `You write short authentic English reading texts for a learner. ${LEARNER} Return JSON only.`,
+    `Write ONE new realistic text (90-140 words) for tier ${tier}: ${TIER_AI[tier] || TIER_AI[1]} — e.g. a notice, email, message thread, abstract, news snippet, job ad or instructions.
+Topic (Vietnamese, may be empty → choose): "${topicVi || ''}"
+Existing texts (must be DIFFERENT): ${avoid.join('; ') || 'none'}
+Wrap 5-7 useful, reusable spoken chunks/collocations in {{double braces}} exactly as they appear in the text.
+Return JSON: {"title": "English title", "titleVi": "tiêu đề tiếng Việt", "text": "the text with {{chunks}}", "questions": ["2 short comprehension/discussion questions to answer out loud"]}`,
+    { maxMs: 60000, temperature: 0.8 }
+  )
+}
+
+// Sinh chủ đề từ vựng mới (Lộ trình từ vựng)
+export function generateUnit({ level, levelName, topicVi, avoid = [] }) {
+  return askJson(
+    `You are an English vocabulary curriculum designer focusing on natural spoken English. ${LEARNER} Return JSON only.`,
+    `Create ONE new vocabulary topic for level ${levelName}. Topic idea (Vietnamese, may be empty → choose a useful everyday/academic/career topic): "${topicVi || ''}"
+Existing topics (must be DIFFERENT): ${avoid.join('; ')}
+Return JSON: {"emoji": "one emoji", "title": "English topic title", "titleVi": "tên chủ đề tiếng Việt", "items": [15 x {"en": "high-frequency word/collocation/phrasal verb natives really use", "vi": "nghĩa tiếng Việt ngắn gọn", "ex": "natural spoken example sentence CONTAINING the exact chunk"}]}`,
+    { maxMs: 90000, temperature: 0.8 }
+  )
+}
+
 // Sinh tình huống mới đầy đủ cho cả 3 module (không giới hạn nội dung)
-export function generateSituation({ tier, topicVi }) {
+export function generateSituation({ tier, topicVi, avoid = [] }) {
   return askJson(
     `You create English speaking & listening lessons. ${LEARNER} Return JSON only, exactly following the schema.`,
-    `Create ONE new lesson situation. Tier ${tier} (${tier === 1 ? 'international dorm & daily life in Taiwan' : 'semiconductor lab, cleanroom, advisor meetings, academic presentations'}).
+    `Create ONE new lesson situation. Tier ${tier} (${TIER_AI[tier] || TIER_AI[1]}).
 Topic idea from learner (Vietnamese, may be empty): "${topicVi || ''}"
+Already existing lessons (create something clearly DIFFERENT): ${avoid.slice(-40).join('; ') || 'none'}
 
 Schema:
 {

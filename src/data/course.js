@@ -24,10 +24,11 @@ export const baseUnits = [...course1, ...course2].map(parse)
 // Gồm cả từ AI thêm vào từng chủ đề (lưu trong trình duyệt)
 export function getUnits(state = getState()) {
   const extra = state.courseExtra || {}
-  return baseUnits.map((u) => ({ ...u, items: [...u.items, ...(extra[u.id] || [])] }))
+  return [...baseUnits, ...(state.customUnits || [])].map((u) => ({ ...u, items: [...u.items, ...(extra[u.id] || [])] }))
 }
 
 export function useUnits() {
   const extra = useStore((s) => s.courseExtra)
-  return baseUnits.map((u) => ({ ...u, items: [...u.items, ...((extra || {})[u.id] || [])] }))
+  const custom = useStore((s) => s.customUnits)
+  return [...baseUnits, ...(custom || [])].map((u) => ({ ...u, items: [...u.items, ...((extra || {})[u.id] || [])] }))
 }

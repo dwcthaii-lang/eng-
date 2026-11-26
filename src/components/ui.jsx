@@ -20,7 +20,7 @@ export function StageChip({ stage }) {
 }
 
 export function TierChip({ tier }) {
-  return <span className={`chip ${TIERS[tier].color}`}>{TIERS[tier].short}</span>
+  return <span className={`chip ${(TIERS[tier] || TIERS[1]).color}`}>{(TIERS[tier] || TIERS[1]).short}</span>
 }
 
 // Đồng hồ phiên học (gợi ý thời lượng của module)

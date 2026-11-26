@@ -39,6 +39,9 @@ const initial = {
   history: [], // nhật ký phiên: { at, module, detail }
   reviews: {}, // lịch ôn từng bài: 'type:id' -> {...}
   customSituations: [], // tình huống do AI tạo / bạn nhập
+  customTranslations: [], // đoạn dịch AI tạo thêm
+  customUnits: [], // chủ đề từ vựng AI tạo thêm
+  customReadings: [], // bài đọc AI tạo thêm
   translations: {}, // đoạn dịch: id -> { attempts, last }
   enrich: {}, // vocabId -> dữ liệu mở rộng do AI tạo
   lastNotified: '',

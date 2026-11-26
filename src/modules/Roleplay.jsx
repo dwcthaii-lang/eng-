@@ -1,7 +1,8 @@
 // MODULE 3: Nhập vai phản xạ có áp lực thời gian (Timed Roleplay Simulator)
 import { today } from '../lib/date'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useSituations, findSituation, TIERS } from '../data'
+import { useSituations, findSituation, TIERS, TIER_IDS } from '../data'
+import { EndlessCard } from '../components/Endless'
 import { scheduleReview, nextDueLabel } from '../lib/review'
 import { getState, update, useStore, logHistory } from '../lib/store'
 import { speak, stopSpeaking } from '../lib/speech'
@@ -30,7 +31,7 @@ function RoleplayList() {
   return (
     <div>
       <PageHeader title="⏱️ Nhập vai phản xạ" subtitle="AI nói xong → đồng hồ đếm ngược buộc bạn BẮT ĐẦU nói. Bí từ thì bấm Gợi ý (chỉ 2–3 từ khoá)." right={<a className="btn-ghost" href="#/library">✨ Thêm tình huống</a>} />
-      {[1, 2].map((tier) => (
+      {TIER_IDS.map((tier) => (
         <div key={tier} className="mb-8">
           <div className="label mb-3">{TIERS[tier].label}</div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -45,6 +46,7 @@ function RoleplayList() {
               </a>
             ))}
           </div>
+          <EndlessCard kind="situation" tier={tier} label="nhập vai" total={situations.filter((s) => s.tier === tier).length} done={situations.filter((s) => s.tier === tier && progress[s.id]?.count > 0).length} hrefFor={(it) => `#/roleplay/${it.id}`} />
         </div>
       ))}
     </div>

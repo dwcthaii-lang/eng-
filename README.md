@@ -52,3 +52,8 @@ Giữ `Space` = nói · `R` = nghe lại · `H` = gợi ý · `Enter` = tiếp �
 
 ---
 Hướng dẫn chi tiết từng module, lộ trình 90 phút/ngày, cấu trúc code: xem **HUONG-DAN-CHI-TIET.md**.
+
+## Tầng 3 & học không giới hạn
+- **Tầng 3 · Sự nghiệp & giao tiếp chuyên nghiệp**: hỏi đáp hội thảo, phỏng vấn thực tập, gọi hãng thiết bị, bàn giao ca ở fab (thẻ nói + bài nghe + nhập vai) và 6 đoạn dịch (email ứng tuyển, bảo vệ luận văn…).
+- Dưới mỗi tầng ở Nhập vai / Nghe / Dịch đoạn văn có ô **✨ Tạo bài mới** (hoặc 🎲 chủ đề ngẫu nhiên chưa học). Lộ trình từ vựng có **✨ Tạo chủ đề** cho từng cấp; Đọc chủ động có **✨ Bài đọc mới**.
+- Mọi bài AI tạo đều vào lịch ôn (SRS) như bài có sẵn; cụm từ trong bài được đưa vào kho từ.

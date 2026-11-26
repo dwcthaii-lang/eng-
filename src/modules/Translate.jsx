@@ -1,7 +1,9 @@
 // Dịch đoạn văn Việt -> Anh: gợi ý từ khi bí, sửa ngữ pháp (LanguageTool) + từ vựng (AI), có lịch ôn
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { translationSet } from '../data/translations'
-import { TIERS } from '../data'
+import { getTranslations, useTranslations } from '../data/translations'
+import { EndlessCard } from '../components/Endless'
+import { seedVocab } from '../lib/srs'
+import { TIERS, TIER_IDS } from '../data'
 import { useStore, update, getState, logHistory } from '../lib/store'
 import { scheduleReview, nextDueLabel } from '../lib/review'
 import { similarity, chunkUsed, normalize } from '../lib/text'
@@ -15,17 +17,19 @@ import { Elapsed } from '../components/Elapsed'
 import { TierChip } from '../components/ui'
 
 export default function Translate({ id }) {
-  const item = translationSet.find((x) => x.id === id)
+  const list = useTranslations()
+  const item = list.find((x) => x.id === id)
   return item ? <TranslateTask key={item.id} item={item} /> : <TranslateList />
 }
 
 function TranslateList() {
   const reviews = useStore((s) => s.reviews)
+  const translationSet = useTranslations()
   const t = today()
   return (
     <div className="space-y-6">
       <p className="text-sm text-slate-600">Đọc đoạn tiếng Việt → dịch sang tiếng Anh tự nhiên. Bí từ thì bấm gợi ý hoặc tra nhanh. Sau khi nộp: sửa ngữ pháp, gợi ý từ tự nhiên hơn, so với bản mẫu. Mỗi đoạn được xếp lịch ôn lại.</p>
-      {[1, 2].map((tier) => (
+      {TIER_IDS.map((tier) => (
         <div key={tier}>
           <div className="label mb-2">{TIERS[tier].label}</div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -33,12 +37,13 @@ function TranslateList() {
               const rv = reviews[`translate:${x.id}`]
               return (
                 <a key={x.id} href={`#/writing/translate/${x.id}`} className="card !p-4 flex items-center justify-between gap-3 hover:border-indigo-300">
-                  <span className="font-medium">{x.titleVi}</span>
+                  <span className="font-medium">{x.titleVi}{x.custom && <span className="chip bg-amber-100 text-amber-800 ml-2">AI tạo</span>}</span>
                   {rv ? <span className={`chip ${rv.due <= t ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>{rv.due <= t ? '📅 Cần ôn' : nextDueLabel(rv)}</span> : <span className="chip bg-slate-100 text-slate-600">Mới</span>}
                 </a>
               )
             })}
           </div>
+          <EndlessCard kind="translation" tier={tier} label="đoạn dịch" total={translationSet.filter((x) => x.tier === tier).length} done={translationSet.filter((x) => x.tier === tier && reviews[`translate:${x.id}`]).length} hrefFor={(it) => `#/writing/translate/${it.id}`} />
         </div>
       ))}
     </div>
@@ -49,7 +54,7 @@ function lookupOffline(q) {
   const n = q.trim().toLowerCase()
   if (!n) return []
   const out = []
-  translationSet.forEach((t) => t.glossary.forEach(([vi, en]) => vi.toLowerCase().includes(n) && out.push({ vi, en })))
+  getTranslations().forEach((t) => t.glossary.forEach(([vi, en]) => vi.toLowerCase().includes(n) && out.push({ vi, en })))
   Object.values(getState().vocab).forEach((v) => v.vi?.toLowerCase().includes(n) && out.push({ vi: v.vi, en: v.en }))
   return [...new Map(out.map((x) => [x.en, x])).values()].slice(0, 6)
 }
@@ -114,6 +119,7 @@ function TranslateTask({ item }) {
       grade -= (shownHints / Math.max(1, terms.length)) * 2
       scheduleReview('translate', item.id, Math.max(0, grade), `✍️ ${item.titleVi}`)
     }
+    seedVocab(item.glossary.map(([vi, en]) => ({ en, vi, source: `translate:${item.id}` })))
     update((s) => {
       const r = s.translations[item.id] || (s.translations[item.id] = { attempts: 0 })
       r.attempts += 1

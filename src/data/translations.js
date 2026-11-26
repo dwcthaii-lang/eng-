@@ -80,4 +80,34 @@ export const translationSet = [
     vi: 'Lúc 3 giờ chiều, có một ít dung dịch piranha bị đổ trên bàn hoá ướt, khoảng 20 ml. Hoá chất chỉ dính vào găng tay ngoài, và em đã thay găng ngay. Em đã dùng bộ xử lý tràn đổ để trung hoà, nhưng nhờ anh kiểm tra lại giúp em.',
     en: "At 3 p.m., there was a small spill of piranha solution on the wet bench, about twenty milliliters. It only got on my outer glove, and I changed it right away. I used the spill kit to neutralize it, but could you double-check it for me?",
     glossary: [['có một ít bị đổ', 'there was a small spill'], ['bàn hoá ướt', 'wet bench'], ['ngay lập tức', 'right away'], ['bộ xử lý tràn đổ', 'spill kit'], ['trung hoà', 'neutralize'], ['kiểm tra lại', 'double-check']] },
+  // ── TẦNG 3: Sự nghiệp & giao tiếp chuyên nghiệp
+  { id: 'tr-conf-qa', tier: 3, situationId: 'car-conference', titleVi: 'Trả lời câu hỏi ở hội thảo',
+    vi: 'Cảm ơn anh, đó là một câu hỏi rất hay. Thành thật mà nói, chúng tôi chưa đo độ tin cậy ở nhiệt độ cao. Đó là một phần trong kế hoạch nghiên cứu tiếp theo của nhóm. Nếu anh quan tâm, tôi rất sẵn lòng trao đổi thêm sau phiên này.',
+    en: "Thank you, that's a great question. To be honest, we haven't measured the reliability at high temperatures yet. That's part of our group's future work. If you're interested, I'd be happy to discuss it further after the session.",
+    glossary: [['thành thật mà nói', 'to be honest'], ['độ tin cậy', 'reliability'], ['kế hoạch nghiên cứu tiếp theo', 'future work'], ['rất sẵn lòng', "I'd be happy to"], ['trao đổi thêm', 'discuss it further']] },
+  { id: 'tr-cover-email', tier: 3, situationId: 'car-interview', titleVi: 'Email ứng tuyển thực tập',
+    vi: 'Kính gửi chị Lin, em là học viên thạc sĩ năm hai ngành kỹ thuật bán dẫn. Em viết email này để ứng tuyển vị trí thực tập kỹ sư quy trình. Nghiên cứu của em tập trung vào transistor màng mỏng, và em đã có hơn một năm kinh nghiệm làm việc trong phòng sạch. Em xin gửi kèm CV và rất mong có cơ hội được phỏng vấn.',
+    en: "Dear Ms. Lin, I'm a second-year master's student in semiconductor engineering, and I'm writing to apply for the process engineering internship. My research focuses on thin-film transistors, and I have over a year of hands-on cleanroom experience. Please find my CV attached. I'd really appreciate the opportunity to interview.",
+    glossary: [['ứng tuyển', 'apply for'], ['tập trung vào', 'focuses on'], ['kinh nghiệm thực tế', 'hands-on experience'], ['gửi kèm', 'please find … attached'], ['rất mong có cơ hội', "I'd appreciate the opportunity"]] },
+  { id: 'tr-vendor', tier: 3, situationId: 'car-vendor', titleVi: 'Báo lỗi máy cho hãng thiết bị',
+    vi: 'Chào anh Kevin, từ thứ Hai máy ALD của chúng tôi liên tục báo lỗi áp suất. Chúng tôi đã khởi động lại hai lần và kiểm tra đường khí nhưng lỗi vẫn còn. Tôi đã gửi kèm file log ba ngày gần nhất. Nhóm sắp đến hạn nộp bài báo, nên nếu được, anh có thể cử kỹ sư qua trong tuần này không?',
+    en: "Hi Kevin, our ALD tool has been showing a pressure error since Monday. We've restarted it twice and checked the gas lines, but the problem persists. I've attached the log files from the last three days. We have a paper deadline coming up, so if possible, could you send an engineer over this week?",
+    glossary: [['liên tục báo lỗi', 'has been showing an error'], ['lỗi vẫn còn', 'the problem persists'], ['đường khí', 'gas lines'], ['sắp đến hạn', 'have a deadline coming up'], ['cử người qua', 'send someone over']] },
+  { id: 'tr-handover', tier: 3, situationId: 'car-handover', titleVi: 'Ghi chú bàn giao ca',
+    vi: 'Bàn giao ca đêm: máy khắc số 3 đang dừng để bảo trì định kỳ, dự kiến chạy lại khoảng 10 giờ tối. Có hai lô đang chờ khắc, trong đó lô 4417 là lô ưu tiên, phải xong trước 6 giờ sáng. Lô cuối có số hạt bụi hơi cao, tôi đã ghi vào hệ thống. Nếu số hạt tiếp tục tăng, hãy báo ngay cho kỹ sư quy trình.',
+    en: "Night shift handover: Etcher 3 is down for preventive maintenance and is expected to be back up around 10 p.m. Two lots are waiting for etching, and lot 4417 is a hot lot that has to be done by 6 a.m. The particle count on the last lot was a bit high, and I've logged it in the system. If it keeps going up, please escalate to the process engineer right away.",
+    glossary: [['bảo trì định kỳ', 'preventive maintenance'], ['chạy lại', 'be back up'], ['lô ưu tiên', 'hot lot'], ['số hạt bụi', 'particle count'], ['báo lên', 'escalate to']] },
+  { id: 'tr-defense', tier: 3, situationId: '', titleVi: 'Mở đầu buổi bảo vệ luận văn',
+    vi: 'Kính chào các thầy cô trong hội đồng. Hôm nay em xin trình bày luận văn về việc cải thiện độ ổn định của transistor màng mỏng oxide. Bài trình bày gồm bốn phần: động lực nghiên cứu, phương pháp, kết quả chính và hướng phát triển. Em sẽ trình bày trong khoảng hai mươi phút, sau đó rất mong nhận được câu hỏi và góp ý của hội đồng.',
+    en: "Good morning, members of the committee. Today I'd like to present my thesis on improving the stability of oxide thin-film transistors. My talk is divided into four parts: motivation, methods, key results, and future work. I'll speak for about twenty minutes, and after that I'd welcome your questions and feedback.",
+    glossary: [['hội đồng', 'the committee'], ['cải thiện độ ổn định', 'improve the stability'], ['gồm bốn phần', 'is divided into four parts'], ['kết quả chính', 'key results'], ['rất mong nhận được', "I'd welcome"]] },
+  { id: 'tr-advisor-intern', tier: 3, situationId: '', titleVi: 'Xin phép giáo sư đi thực tập',
+    vi: 'Thưa thầy, em được nhận vào chương trình thực tập sáu tháng ở một công ty bán dẫn, bắt đầu từ tháng Bảy. Em nghĩ đây là cơ hội tốt để học về quy trình sản xuất thực tế. Em sẽ cố gắng hoàn thành các thí nghiệm còn lại trước khi đi, và vẫn cập nhật tiến độ luận văn hàng tháng cho thầy. Thầy thấy kế hoạch này có ổn không ạ?',
+    en: "Professor, I've been offered a six-month internship at a semiconductor company starting in July. I think it's a great opportunity to learn about real production processes. I'll try to finish the remaining experiments before I leave, and I'll keep updating you on my thesis progress every month. Would that plan work for you?",
+    glossary: [['được nhận', "I've been offered"], ['cơ hội tốt', 'a great opportunity'], ['thí nghiệm còn lại', 'the remaining experiments'], ['cập nhật tiến độ', 'keep you updated on my progress'], ['có ổn không', 'would that work for you']] },
 ]
+
+// Gồm cả đoạn dịch AI tạo thêm (lưu trong trình duyệt) – học không giới hạn
+import { getState, useStore } from '../lib/store'
+export function getTranslations(state = getState()) { return [...translationSet, ...(state.customTranslations || [])] }
+export function useTranslations() { const c = useStore((s) => s.customTranslations); return [...translationSet, ...(c || [])] }

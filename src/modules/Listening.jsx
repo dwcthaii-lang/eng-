@@ -1,7 +1,8 @@
 // MODULE 2: Luyện nghe "Cai phụ đề" 3 bước (Blind → Gap-fill → Shadowing)
 import { today } from '../lib/date'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSituations, findSituation, TIERS } from '../data'
+import { useSituations, findSituation, TIERS, TIER_IDS } from '../data'
+import { EndlessCard } from '../components/Endless'
 import { scheduleReview, reviewOf, nextDueLabel } from '../lib/review'
 import { update, useStore, logHistory } from '../lib/store'
 import { speakLines, speak, stopSpeaking, useSpeechRecognition } from '../lib/speech'
@@ -31,7 +32,7 @@ function ListeningList() {
   return (
     <div>
       <PageHeader title="🎧 Nghe “cai phụ đề”" subtitle="Mỗi bài 30–60 giây, tốc độ tự nhiên. 3 bước khoá cứng: Nghe mù → Điền chỗ nuốt âm → Shadowing." right={<a className="btn-ghost" href="#/library">✨ Thêm bài mới</a>} />
-      {[1, 2].map((tier) => (
+      {TIER_IDS.map((tier) => (
         <div key={tier} className="mb-8">
           <div className="label mb-3">{TIERS[tier].label}</div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -51,6 +52,7 @@ function ListeningList() {
               )
             })}
           </div>
+          <EndlessCard kind="situation" tier={tier} label="bài nghe" total={situations.filter((s) => s.tier === tier).length} done={situations.filter((s) => s.tier === tier && progress[s.id]?.done).length} hrefFor={(it) => `#/listening/${it.id}`} />
         </div>
       ))}
     </div>

@@ -8,7 +8,7 @@ import { seedVocab, markHeard, recordSpoken, isDue, vocabId, STAGES } from '../l
 import { scheduleReview, nextDueLabel } from '../lib/review'
 import { chunkUsed, normalize, stem, similarity } from '../lib/text'
 import { speak, stopSpeaking } from '../lib/speech'
-import { aiEnabled, generateUnitItems } from '../lib/ai'
+import { aiEnabled, generateUnitItems, generateUnit } from '../lib/ai'
 import { useHotkeys } from '../lib/hotkeys'
 import { today } from '../lib/date'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
@@ -149,9 +149,37 @@ function Overview({ units }) {
                 )
               })}
             </div>
+            {open && <NewUnit level={lv} units={units} />}
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// Tạo chủ đề từ vựng mới bằng AI – lộ trình không bao giờ hết
+function NewUnit({ level, units }) {
+  const [topic, setTopic] = useState('')
+  const [st, setSt] = useState(null)
+  if (!aiEnabled()) return null
+  const create = async () => {
+    setSt({ busy: true })
+    try {
+      const r = await generateUnit({ level, levelName: `${LEVELS[level].cefr} / ${LEVELS[level].band}`, topicVi: topic, avoid: units.map((u) => `${u.titleVi} (${u.title})`) })
+      const items = (r.items || []).filter((i) => i.en && i.vi && i.ex).map((i) => ({ en: String(i.en), vi: String(i.vi), ex: String(i.ex) }))
+      if (items.length < 5) throw new Error('AI trả về quá ít từ, thử lại nhé.')
+      const unit = { id: `cu-${Date.now().toString(36)}`, level, custom: true, emoji: String(r.emoji || '✨').slice(0, 4), title: String(r.title || 'New topic'), titleVi: String(r.titleVi || topic || 'Chủ đề mới'), items }
+      update((s) => { (s.customUnits ||= []).push(unit) })
+      setSt({ ok: unit })
+      setTopic('')
+    } catch (e) { setSt({ err: String(e.message || e) }) }
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-2 rounded-xl border-2 border-dashed border-slate-200 p-3 sm:flex-row sm:items-center">
+      <input className="input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="✨ Tạo chủ đề từ vựng mới cho cấp này (vd: phỏng vấn xin việc, nấu ăn, cảm xúc…) – để trống: AI tự chọn" />
+      <button className="btn-ghost shrink-0" disabled={st?.busy} onClick={create}>{st?.busy ? <>⏳ AI đang soạn 15 từ…<Elapsed /></> : '✨ Tạo chủ đề'}</button>
+      {st?.ok && <a className="text-sm font-semibold text-emerald-700 underline shrink-0" href={`#/course/${st.ok.id}`}>Học “{st.ok.titleVi}” →</a>}
+      {st?.err && <span className="text-sm text-rose-600">{st.err}</span>}
     </div>
   )
 }

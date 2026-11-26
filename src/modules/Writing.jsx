@@ -10,7 +10,8 @@ import { useStore, update, logHistory } from '../lib/store'
 import { addReactivate, isDue, vocabId } from '../lib/srs'
 import { chunkUsed, similarity, normalize } from '../lib/text'
 import { speak } from '../lib/speech'
-import { aiEnabled, gradeWriting } from '../lib/ai'
+import { aiEnabled, gradeWriting, generateReading } from '../lib/ai'
+import { randomTopic } from '../data'
 import { checkGrammar, applyFixes, isMinorMatch } from '../lib/grammar'
 import { today } from '../lib/date'
 import { useMic, MicButton, LiveTranscript } from '../components/Mic'
@@ -44,15 +45,33 @@ export default function Writing({ tab: routeTab, id }) {
 
 function ActiveReading() {
   const vocab = useStore((s) => s.vocab)
+  const custom = useStore((s) => s.customReadings)
+  const all = [...readings, ...(custom || [])]
   const [id, setId] = useState(readings[0].id)
-  const r = readings.find((x) => x.id === id)
+  const [gen, setGen] = useState(null)
+  const r = all.find((x) => x.id === id) || readings[0]
+  const createReading = async () => {
+    setGen({ busy: true })
+    try {
+      const titles = all.map((x) => x.titleVi)
+      const tier = [1, 2, 3][all.length % 3]
+      const raw = await generateReading({ tier, topicVi: randomTopic(tier, titles), avoid: titles })
+      if (!raw.text || !/\{\{.+?\}\}/.test(raw.text)) throw new Error('AI trả về bài đọc chưa đúng dạng, thử lại nhé.')
+      const it = { id: `rc-${Date.now().toString(36)}`, tier, custom: true, title: String(raw.title || 'Reading'), titleVi: String(raw.titleVi || 'Bài đọc mới'), text: String(raw.text), questions: (raw.questions || []).map(String).slice(0, 3) }
+      update((s) => { (s.customReadings ||= []).push(it) })
+      setId(it.id)
+      setGen(null)
+    } catch (e) { setGen({ err: String(e.message || e) }) }
+  }
   const parts = r.text.split(/(\{\{.+?\}\})/g)
   const plain = r.text.replace(/\{\{|\}\}/g, '')
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {readings.map((x) => <button key={x.id} onClick={() => setId(x.id)} className={x.id === id ? 'btn-primary !py-1' : 'btn-ghost !py-1'}>{x.titleVi}</button>)}
+        {all.map((x) => <button key={x.id} onClick={() => setId(x.id)} className={x.id === id ? 'btn-primary !py-1' : 'btn-ghost !py-1'}>{x.titleVi}</button>)}
+        {aiEnabled() && <button className="btn-ghost !py-1 border-dashed" disabled={gen?.busy} onClick={createReading}>{gen?.busy ? <>⏳ AI đang viết…<Elapsed /></> : '✨ Bài đọc mới'}</button>}
       </div>
+      {gen?.err && <div className="text-sm text-rose-600">{gen.err}</div>}
       <div className="card space-y-3">
         <div className="flex items-center gap-2"><TierChip tier={r.tier} /><b>{r.title}</b>
           <button className="btn-ghost !py-1 ml-auto" onClick={() => speak(plain)}>🔈 Nghe đọc</button>
