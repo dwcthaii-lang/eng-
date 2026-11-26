@@ -97,6 +97,25 @@ function useReminder() {
   }, [])
 }
 
+// Chế độ sáng / tối (theo cài đặt hoặc theo máy)
+function useTheme(theme) {
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
+    const apply = () => {
+      const dark = theme === 'dark' || (theme === 'system' && mq?.matches)
+      document.documentElement.classList.toggle('dark', !!dark)
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0b1220' : '#4f46e5')
+    }
+    apply()
+    mq?.addEventListener?.('change', apply)
+    return () => mq?.removeEventListener?.('change', apply)
+  }, [theme])
+}
+
+function isDarkNow() {
+  return document.documentElement.classList.contains('dark')
+}
+
 export default function App() {
   const [page, param, param2] = useHashRoute()
   const s = useStore()
@@ -106,6 +125,8 @@ export default function App() {
   // Đưa cụm từ của mọi tình huống (kể cả tình huống mới tạo) vào kho từ
   useEffect(() => { seedVocab(getSeedVocabEntries()) }, [s.customSituations])
   useReminder()
+  useTheme(s.settings.theme || 'system')
+  const toggleTheme = () => update((d) => { d.settings.theme = isDarkNow() ? 'light' : 'dark' })
   useEffect(() => setMoreOpen(false), [page])
 
   const moduleKey = { recall: 'recall', listening: 'listening', roleplay: 'roleplay', writing: 'writing', vocab: 'recall', review: 'recall', course: 'course', grammar: 'grammar', pron: 'recall' }[page]
@@ -134,7 +155,10 @@ export default function App() {
     <div className="min-h-screen md:flex">
       <aside className="md:w-60 md:min-h-screen md:sticky md:top-0 md:h-screen md:overflow-y-auto border-b md:border-b-0 md:border-r border-slate-200 bg-white">
         <div className="px-5 py-3 md:py-5">
-          <div className="text-lg font-bold">🎙️ English Reflex</div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-lg font-bold">🎙️ English Reflex</div>
+            <button onClick={toggleTheme} className="rounded-lg px-2 py-1 text-lg hover:bg-slate-100" title="Chế độ sáng / tối">{s.settings.theme === 'dark' || (s.settings.theme !== 'light' && typeof document !== 'undefined' && isDarkNow()) ? '☀️' : '🌙'}</button>
+          </div>
           <div className="text-xs text-slate-500">Nghe & Nói phản xạ · Semiconductor × Taiwan</div>
         </div>
         <nav className="hidden md:flex md:flex-col px-3 pb-3 gap-1">

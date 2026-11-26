@@ -10,6 +10,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="English Reflex" />
+    <script>
+      try {
+        var t = (JSON.parse(localStorage.getItem('english-reflex:v1') || '{}').settings || {}).theme || 'system'
+        if (t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark')
+      } catch (e) {}
+    </script>
     <title>English Reflex – Nghe & Nói phản xạ</title>
   </head>
   <body class="bg-slate-50 text-slate-800">

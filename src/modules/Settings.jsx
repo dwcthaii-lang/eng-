@@ -88,6 +88,23 @@ export default function Settings() {
         <div>{ttsSupported ? '✅' : '❌'} Đọc văn bản (SpeechSynthesis) · {voices.length} giọng tiếng Anh</div>
       </div>
 
+      <div className="card space-y-3">
+        <div className="label">Giao diện & cách nhập</div>
+        <div className="flex flex-wrap gap-2">
+          {[['light', '☀️ Sáng'], ['dark', '🌙 Tối'], ['system', '🖥️ Theo máy']].map(([k, l]) => (
+            <button key={k} onClick={() => set({ theme: k })} className={s.theme === k ? 'btn-primary' : 'btn-ghost'}>{l}</button>
+          ))}
+        </div>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={s.autoFocusType} onChange={(e) => set({ autoFocusType: e.target.checked })} />
+          <span>Tự đặt con trỏ vào ô gõ khi sang câu mới (trên máy tính). <span className="text-slate-500">Khi ô gõ đang trống, vẫn giữ <span className="kbd">Space</span> để nói và <span className="kbd">Enter</span> để sang câu.</span></span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={s.showSentenceVi} onChange={(e) => set({ showSentenceVi: e.target.checked })} />
+          <span>Hiện nghĩa tiếng Việt của câu ví dụ (Lộ trình từ vựng).</span>
+        </label>
+      </div>
+
       <div className="card space-y-4">
         <div className="label">AI nâng cao (tuỳ chọn) – chấm ngữ nghĩa & sinh hội thoại động</div>
         <div className="flex flex-wrap gap-2">

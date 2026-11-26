@@ -119,3 +119,44 @@ export async function pronounce(text, accent = 'US', { slow = false, info } = {}
   const ok = await speakAccent(text, accent, { rate: slow ? 0.6 : 0.95 })
   return ok ? 'tts' : 'no-voice'
 }
+
+// Dịch câu Anh → Việt (lưu bộ nhớ đệm để lần sau hiện ngay, dùng được cả khi offline)
+const TR_KEY = 'english-reflex:tr'
+let tr = {}
+try { tr = JSON.parse(localStorage.getItem(TR_KEY) || '{}') } catch {}
+export function cachedTranslation(en) {
+  return tr[en.trim()] || null
+}
+export async function translateText(en) {
+  const key = en.trim()
+  if (!key) return null
+  if (tr[key]) return tr[key]
+  let out = null
+  try {
+    const r = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(key)}`)
+    const d = await r.json()
+    const t = (d?.[0] || []).map((x) => x?.[0] || '').join('').trim()
+    if (t) out = { vi: t, by: 'Google' }
+  } catch {}
+  if (!out && aiEnabled()) {
+    try {
+      const r = await askJson('Translate English to natural, everyday Vietnamese. Return JSON only.', `Sentence: "${key}"\nReturn JSON: {"vi": "..."}`)
+      if (r?.vi) out = { vi: String(r.vi), by: 'AI' }
+    } catch {}
+  }
+  if (!out) {
+    try {
+      const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(key)}&langpair=en|vi`)
+      const d = await r.json()
+      const t = d?.responseData?.translatedText
+      if (t && t.toLowerCase() !== key.toLowerCase()) out = { vi: t, by: 'MyMemory' }
+    } catch {}
+  }
+  if (out) {
+    tr[key] = out
+    const ks = Object.keys(tr)
+    if (ks.length > 3000) ks.slice(0, ks.length - 3000).forEach((k) => delete tr[k])
+    try { localStorage.setItem(TR_KEY, JSON.stringify(tr)) } catch {}
+  }
+  return out
+}

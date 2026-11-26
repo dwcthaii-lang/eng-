@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { getState } from '../lib/store'
 import { useSpeechRecognition } from '../lib/speech'
 import { useHoldToTalk } from '../lib/hotkeys'
 import { stopSpeaking } from '../lib/speech'
@@ -68,8 +69,20 @@ export function LiveTranscript({ mic, placeholder = 'Câu bạn nói sẽ hiện
 }
 
 // Ô gõ thay thế khi không dùng mic
+// Tự đặt con trỏ vào ô gõ (máy tính) để gõ ngay khi sang câu mới
 export function TypeFallback({ onSubmit, placeholder = 'Hoặc gõ câu trả lời rồi Enter…' }) {
   const [v, setV] = useState('')
+  const ref = useRef(null)
+  useEffect(() => {
+    const fine = !window.matchMedia || window.matchMedia('(pointer: fine)').matches
+    if (!fine || !getState().settings.autoFocusType) return
+    const t = setTimeout(() => {
+      const a = document.activeElement
+      if (a && a !== document.body && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) return
+      ref.current?.focus({ preventScroll: true })
+    }, 60)
+    return () => clearTimeout(t)
+  }, [])
   return (
     <form
       onSubmit={(e) => {
@@ -77,7 +90,7 @@ export function TypeFallback({ onSubmit, placeholder = 'Hoặc gõ câu trả l�
         if (v.trim()) { onSubmit(v.trim()); setV(''); e.target.querySelector('input')?.blur() }
       }}
     >
-      <input className="input" value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder} />
+      <input ref={ref} data-talk className="input" value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder} />
     </form>
   )
 }

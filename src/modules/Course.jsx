@@ -13,6 +13,8 @@ import { useHotkeys } from '../lib/hotkeys'
 import { today } from '../lib/date'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { ChunkCluster } from '../components/ChunkCluster'
+import { SentenceVi } from '../components/SentenceVi'
+import { translateText } from '../lib/dict'
 import { PageHeader, Progress, Shortcuts, SessionTimer, StageChip } from '../components/ui'
 
 const src = (unitId) => `course:${unitId}`
@@ -236,6 +238,9 @@ function Practice({ title, unit, items, learnFirst = false, reviewMode = false, 
   const [idx, setIdx] = useState(0)
   const [results, setResults] = useState([])
 
+  // Dịch trước các câu ví dụ để hiện nghĩa ngay khi mở thẻ
+  useEffect(() => { if (getState().settings.showSentenceVi) queue.forEach((i) => !i.exVi && translateText(i.ex)) }, [queue])
+
   // Khi bắt đầu học: đưa từ vào kho từ để có lịch ôn
   useEffect(() => {
     if (learnFirst) seedVocab(queue.map((i) => ({ en: i.en, vi: i.vi, source: src(i.unitId), example: i.ex })))
@@ -331,7 +336,10 @@ function LearnCard({ item, settings, onNext }) {
           <div className="text-3xl font-bold text-indigo-700">{item.en}</div>
           <div className="text-lg text-slate-600">{item.vi}</div>
         </div>
-        <div className="rounded-xl bg-slate-50 p-3 text-lg">“{item.ex}” <button onClick={play} className="ml-1 text-slate-400 hover:text-indigo-600">🔈</button></div>
+        <div className="rounded-xl bg-slate-50 p-3 text-lg">
+          <div>“{item.ex}” <button onClick={play} className="ml-1 text-slate-400 hover:text-indigo-600">🔈</button></div>
+          <SentenceVi en={item.ex} vi={item.exVi} className="mt-1" />
+        </div>
         <ChunkCluster en={item.en} vi={item.vi} compact />
       </div>
       <div className="card flex flex-col items-center gap-3">
@@ -381,6 +389,7 @@ function SayCard({ item, settings, aidedByDefault, onDone }) {
           <div className="text-sm"><span className="text-slate-500">Bạn nói:</span> “{ans.t}”</div>
           {ans.retry && <div className="text-sm"><span className="text-slate-500">Lần nói lại:</span> “{ans.retry}” {ans.retryOk ? '✅' : ''}</div>}
           <div className="text-lg"><b className="text-indigo-700">{item.en}</b> – “{item.ex}” <button onClick={play}>🔈</button></div>
+          <SentenceVi en={item.ex} vi={item.exVi} />
           <div className="flex gap-2">
             <button className="btn-ghost" onClick={play}>🔊 Nghe <span className="kbd">R</span></button>
             <button className="btn-primary" onClick={next}>Tiếp <span className="kbd !bg-indigo-500 !text-white !border-indigo-400">Enter</span></button>

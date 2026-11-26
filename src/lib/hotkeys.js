@@ -6,6 +6,12 @@ function isTyping(e) {
   return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
 }
 
+// Ô gõ câu trả lời (data-talk) đang TRỐNG: vẫn cho giữ Space để nói và Enter để sang câu
+function emptyTalkBox(e) {
+  const t = e.target
+  return !!t && t.dataset?.talk !== undefined && !t.value
+}
+
 // map: { r: fn, h: fn, Enter: fn, ... } (không phân biệt hoa thường cho chữ cái)
 export function useHotkeys(map, enabled = true) {
   const ref = useRef(map)
@@ -13,7 +19,8 @@ export function useHotkeys(map, enabled = true) {
   useEffect(() => {
     if (!enabled) return
     const onKey = (e) => {
-      if (isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (isTyping(e) && !(e.key === 'Enter' && emptyTalkBox(e))) return
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
       const fn = ref.current[k]
       if (fn) {
@@ -36,14 +43,14 @@ export function useHoldToTalk({ onStart, onStop, enabled = true }) {
     const kd = (e) => {
       // Esc trong ô nhập -> thoát ô để dùng lại phím Space nói
       if (e.key === 'Escape' && isTyping(e)) return e.target.blur()
-      if (e.code !== 'Space' || isTyping(e)) return
+      if (e.code !== 'Space' || (isTyping(e) && !emptyTalkBox(e))) return
       e.preventDefault()
       if (e.repeat || down.current) return
       down.current = true
       ref.current.onStart?.()
     }
     const ku = (e) => {
-      if (e.code !== 'Space' || isTyping(e)) return
+      if (e.code !== 'Space' || (isTyping(e) && !emptyTalkBox(e) && !down.current)) return
       e.preventDefault()
       if (!down.current) return
       down.current = false
