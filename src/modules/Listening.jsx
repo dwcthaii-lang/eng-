@@ -15,6 +15,7 @@ import { markHeard } from '../lib/srs'
 import { aiEnabled, gradeSummary } from '../lib/ai'
 import { useHotkeys } from '../lib/hotkeys'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
+import { Elapsed } from '../components/Elapsed'
 import { PageHeader, SessionTimer, TierChip, Shortcuts } from '../components/ui'
 
 export default function Listening({ id }) {
@@ -204,7 +205,7 @@ function BlindStep({ sit, playAll, stop, playingLine, onNext }) {
           <button className="btn-primary" disabled={summary.trim().length < 10} onClick={submit}>Nộp tóm tắt & xem ý chính</button>
         ) : (
           <div className="space-y-3">
-            {ai?.loading && <div className="text-sm text-slate-500">🤖 AI đang chấm…</div>}
+            {ai?.loading && <div className="text-sm text-slate-500">🤖 AI đang chấm…<Elapsed /></div>}
             {ai?.error && <div className="text-sm text-rose-600">AI lỗi: {ai.error}</div>}
             {ai?.score != null && (
               <div className="rounded-xl bg-indigo-50 p-3 text-sm">

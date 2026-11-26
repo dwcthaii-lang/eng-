@@ -8,6 +8,7 @@ import { checkGrammar } from '../lib/grammar'
 import { translateText } from '../lib/dict'
 import { chunkUsed, similarity, normalize } from '../lib/text'
 import { speak } from '../lib/speech'
+import { Elapsed } from './Elapsed'
 
 // Lỗi người Việt hay mắc khi nói (luôn chạy, không cần mạng)
 const BASE = { uses: 'use', goes: 'go', does: 'do', has: 'have', makes: 'make', takes: 'take', gets: 'get', comes: 'come', sees: 'see', needs: 'need', wants: 'want', works: 'work', tells: 'tell', asks: 'ask', checks: 'check', sends: 'send', fixes: 'fix', tries: 'try', used: 'use', went: 'go', did: 'do', had: 'have', made: 'make', took: 'take', got: 'get', came: 'come', saw: 'see', needed: 'need', wanted: 'want', worked: 'work', told: 'tell', asked: 'ask', sent: 'send', checked: 'check', tried: 'try', fixed: 'fix' }
@@ -125,7 +126,7 @@ export function SentenceReview({ transcript, chunks = [], model = '', situationV
   return (
     <div className="space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-semibold">📝 Chấm cả câu <span className="chip bg-slate-100 text-slate-600">chấm nhanh · điểm sơ bộ</span>{aiState === 'pending' && <span className="ml-2 text-xs font-normal text-indigo-600 animate-pulse">🤖 AI đang chấm ngữ nghĩa & cách dùng từ…</span>}</div>
+        <div className="font-semibold">📝 Chấm cả câu <span className="chip bg-slate-100 text-slate-600">chấm nhanh · điểm sơ bộ</span>{aiState === 'pending' && <span className="ml-2 text-xs font-normal text-indigo-600 animate-pulse">🤖 AI đang chấm ngữ nghĩa & cách dùng từ…<Elapsed /></span>}</div>
         <Chips scores={quick.scores} />
       </div>
       <div className="leading-relaxed"><span className="text-slate-500">Câu của bạn: </span><Marked text={transcript} errors={quick.errors} /></div>
@@ -176,7 +177,7 @@ function AiView({ ai, transcript }) {
   return (
     <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-semibold">📝 Chấm cả câu <span className="chip bg-indigo-100 text-indigo-700">AI · giáo viên</span>{!ai.done && <span className="ml-2 text-xs font-normal text-indigo-600 animate-pulse">đang viết…</span>}</div>
+        <div className="font-semibold">📝 Chấm cả câu <span className="chip bg-indigo-100 text-indigo-700">AI · giáo viên</span>{!ai.done && <span className="ml-2 text-xs font-normal text-indigo-600 animate-pulse">đang viết…<Elapsed /></span>}</div>
         <Chips scores={[['Ngữ pháp', sub.grammar], ['Từ vựng', sub.vocab], ['Tự nhiên', sub.natural], ['Đúng yêu cầu', sub.task]]} />
       </div>
       {ai.verdict && <div className="rounded-lg bg-white p-2 text-slate-800">🧑‍🏫 {ai.verdict}</div>}

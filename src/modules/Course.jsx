@@ -17,6 +17,7 @@ import { SentenceVi } from '../components/SentenceVi'
 import { SentenceReview } from '../components/SentenceReview'
 import { translateText, translateNatural } from '../lib/dict'
 const exCtx = (i) => `Independent everyday spoken example sentences for learning vocabulary (topic: ${i.unitId}). Translate each sentence on its own; casual friendly tone.`
+import { Elapsed } from '../components/Elapsed'
 import { PageHeader, Progress, Shortcuts, SessionTimer, StageChip } from '../components/ui'
 
 const src = (unitId) => `course:${unitId}`
@@ -193,7 +194,7 @@ function UnitPlayer({ unit }) {
         <div className="flex flex-wrap gap-2">
           <button className="btn-primary" disabled={!fresh.length} onClick={startNew}>▶ Học {Math.min(BATCH, fresh.length)} từ mới</button>
           <a className={`btn-ghost ${learned.length ? '' : 'pointer-events-none opacity-40'}`} href={`#/course/${unit.id}/review`}>🔁 Ôn cả chủ đề ({learned.length})</a>
-          {aiEnabled() && <button className="btn-ghost" onClick={addMore} disabled={adding === 'loading'}>{adding === 'loading' ? '⏳ AI đang soạn…' : '✨ Thêm 15 từ bằng AI'}</button>}
+          {aiEnabled() && <button className="btn-ghost" onClick={addMore} disabled={adding === 'loading'}>{adding === 'loading' ? <>⏳ AI đang soạn…<Elapsed /></> : '✨ Thêm 15 từ bằng AI'}</button>}
         </div>
         {adding && adding !== 'loading' && <div className="text-sm">{adding}</div>}
         {!fresh.length && <div className="text-sm text-emerald-700">🎉 Bạn đã học hết chủ đề này. {aiEnabled() ? 'Bấm “Thêm 15 từ bằng AI” để mở rộng.' : 'Nhập API key Gemini trong Cài đặt để AI thêm từ mới cho chủ đề.'}</div>}

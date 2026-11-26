@@ -10,6 +10,7 @@ import { addReactivate, recordSpoken, vocabId } from '../lib/srs'
 import { aiEnabled, roleplayTurn, roleplayFeedback } from '../lib/ai'
 import { useHotkeys } from '../lib/hotkeys'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
+import { Elapsed } from '../components/Elapsed'
 import { PageHeader, SessionTimer, TierChip, Shortcuts } from '../components/ui'
 
 export default function Roleplay({ id }) {
@@ -281,7 +282,7 @@ function Session({ sit, mode, onExit }) {
           </div>
         )}
         {phase === 'ai' && <div className="text-sm text-slate-500">🔊 {R.aiName} đang nói… hãy nghe kỹ</div>}
-        {phase === 'thinking' && <div className="text-sm text-slate-500">🤖 {R.aiName} đang nghĩ…</div>}
+        {phase === 'thinking' && <div className="text-sm text-slate-500">🤖 {R.aiName} đang nghĩ…<Elapsed /></div>}
         <MicButton mic={mic} />
         <div className="w-full"><LiveTranscript mic={mic} /></div>
         <div className="flex w-full flex-wrap items-center gap-3">
@@ -320,7 +321,7 @@ function Feedback({ sit, fb, history, error, onExit }) {
       <div className="card mb-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="label">3 điểm cần sửa {fb.source === 'ai' ? '(AI chấm)' : '(so với câu mẫu)'}</div>
-          {fb.loading && <span className="text-xs text-slate-500">🤖 AI đang phân tích…</span>}
+          {fb.loading && <span className="text-xs text-slate-500">🤖 AI đang phân tích…<Elapsed /></span>}
         </div>
         {fb.summary && <div className="text-sm text-indigo-700">{fb.summary}</div>}
         {fb.aiError && <div className="text-sm text-rose-600">AI lỗi: {fb.aiError}</div>}

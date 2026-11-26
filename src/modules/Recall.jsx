@@ -12,6 +12,7 @@ import { SentenceVi } from '../components/SentenceVi'
 import { useHotkeys } from '../lib/hotkeys'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { PageHeader, SessionTimer, TierChip, Shortcuts, Progress } from '../components/ui'
+import { Elapsed } from '../components/Elapsed'
 import { today } from '../lib/date'
 
 function buildQueue({ tier, mode, size }) {
@@ -252,7 +253,7 @@ function RecallCard({ item, settings, onDone }) {
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <div className="label">Kết quả</div>
-            <div className="text-2xl font-bold" title="Điểm cả câu: cụm từ + ngữ pháp + độ tự nhiên">{answer.review === null ? <span className="text-base text-indigo-500 animate-pulse">AI đang chấm…</span> : answer.review ?? answer.local.score}<span className="text-base text-slate-400">/10</span></div>
+            <div className="text-2xl font-bold" title="Điểm cả câu: cụm từ + ngữ pháp + độ tự nhiên">{answer.review === null ? <span className="text-base text-indigo-500 animate-pulse">AI đang chấm…<Elapsed /></span> : answer.review ?? answer.local.score}<span className="text-base text-slate-400">/10</span></div>
           </div>
           <div className="text-sm">
             <span className="text-slate-500">Bạn nói: </span>“{answer.transcript}”

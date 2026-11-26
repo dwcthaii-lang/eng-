@@ -5,6 +5,7 @@ import { useStore, update, logHistory } from '../lib/store'
 import { nextDueLabel } from '../lib/review'
 import { aiEnabled, generateSituation } from '../lib/ai'
 import { today } from '../lib/date'
+import { Elapsed } from '../components/Elapsed'
 import { PageHeader, TierChip } from '../components/ui'
 
 // Kiểm tra & chuẩn hoá một tình huống (từ AI hoặc file)
@@ -114,7 +115,7 @@ export default function Library() {
               {[1, 2].map((k) => <button key={k} onClick={() => setTier(k)} className={tier === k ? 'btn-primary !py-1' : 'btn-ghost !py-1'}>{TIERS[k].label}</button>)}
             </div>
             <input className="input" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Chủ đề bạn muốn (tuỳ chọn), vd: mượn xe máy của bạn, hỏi giáo sư về học bổng, máy ALD báo lỗi nhiệt độ…" />
-            <button className="btn-primary" onClick={create} disabled={busy}>{busy ? '⏳ AI đang soạn bài (~15 giây)…' : '✨ Tạo bằng AI'}</button>
+            <button className="btn-primary" onClick={create} disabled={busy}>{busy ? <>⏳ AI đang soạn bài…<Elapsed /></> : '✨ Tạo bằng AI'}</button>
           </>
         ) : (
           <p className="text-sm text-slate-600">Nhập API key Gemini (miễn phí) trong <a className="text-indigo-600 underline" href="#/settings">Cài đặt</a> để AI soạn thêm tình huống mới theo chủ đề bạn muốn, đủ cho cả 3 module. Không có key: bạn vẫn có thể nhập gói bài học (file JSON) bên dưới và tự thêm cụm từ ở Kho từ vựng.</p>

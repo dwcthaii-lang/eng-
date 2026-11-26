@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useStore, update, getState, replaceState, resetAll } from '../lib/store'
 import { useVoices, speak, sttSupported, ttsSupported } from '../lib/speech'
-import { testConnection, lastUsedModel, listGeminiModels } from '../lib/ai'
+import { testConnection, lastUsedModel, listGeminiModels, benchmarkModels } from '../lib/ai'
 import { PageHeader } from '../components/ui'
 
 function Field({ label, hint, children }) {
@@ -19,6 +19,8 @@ export default function Settings() {
   const voices = useVoices()
   const [test, setTest] = useState('')
   const [models, setModels] = useState([])
+  const [bench, setBench] = useState('')
+  const [benchRows, setBenchRows] = useState([])
   const [modelMsg, setModelMsg] = useState('')
   const fileRef = useRef()
   const set = (patch) => update((d) => Object.assign(d.settings, patch))
@@ -53,7 +55,7 @@ export default function Settings() {
   const runTest = async () => {
     setTest('Đang kiểm tra…')
     try {
-      setTest((await testConnection()) ? `✅ Kết nối thành công${lastUsedModel && lastUsedModel !== getState().settings.geminiModel && getState().settings.aiProvider === 'gemini' ? ` (model bạn chọn đang bận/không có, app đã tự dùng ${lastUsedModel})` : ''}` : '⚠️ Phản hồi lạ')
+      setTest((await testConnection()) ? `✅ Kết nối thành công${lastUsedModel && getState().settings.aiProvider === 'gemini' ? ` · model đã trả lời: ${lastUsedModel}` : ''}` : '⚠️ Phản hồi lạ')
     } catch (e) {
       setTest('❌ ' + (e.message || e))
     }
@@ -119,20 +121,30 @@ export default function Settings() {
             <Field label="Gemini API key" hint="Lấy miễn phí tại aistudio.google.com → Get API key">
               <input className="input" type="password" value={s.geminiKey} onChange={(e) => set({ geminiKey: e.target.value.trim() })} placeholder="AIza…" />
             </Field>
-            <Field label="Model" hint="Khuyên dùng: bản “flash” mới nhất (nhanh, gói miễn phí dùng thoải mái). “pro” thông minh hơn nhưng gói miễn phí rất ít lượt. Nếu model bận/ngừng, app tự chuyển model khác.">
+            <Field label="Model" hint="Khuyên dùng “⚡ Tự động”: app đo tốc độ thật trên máy bạn và luôn dùng model đang nhanh nhất; model chậm/quá tải sẽ được thay bằng model khác ngay.">
               <div className="flex gap-2">
-                {models.length ? (
-                  <select className="input" value={s.geminiModel} onChange={(e) => set({ geminiModel: e.target.value })}>
-                    {!models.includes(s.geminiModel) && <option value={s.geminiModel}>{s.geminiModel}</option>}
-                    {models.map((m) => <option key={m} value={m}>{m}{m === models[0] ? ' ⭐ khuyên dùng' : /pro/.test(m) ? ' (thông minh hơn, ít lượt miễn phí)' : /lite/.test(m) ? ' (nhanh, nhẹ)' : /preview/.test(m) ? ' (thử nghiệm)' : ''}</option>)}
-                  </select>
-                ) : (
-                  <input className="input" value={s.geminiModel} onChange={(e) => set({ geminiModel: e.target.value.trim() })} />
-                )}
-                <button className="btn-ghost shrink-0" disabled={!s.geminiKey} onClick={async () => { const l = await listGeminiModels(s.geminiKey, { all: true }); setModels(l); setModelMsg(l.length ? '' : 'Không lấy được danh sách model – kiểm tra lại key.') }}>📋 Chọn</button>
+                <select className="input" value={s.geminiModel || 'auto'} onChange={(e) => set({ geminiModel: e.target.value })}>
+                  <option value="auto">⚡ Tự động – nhanh nhất (khuyên dùng)</option>
+                  {[...new Set([...(s.geminiModel && s.geminiModel !== 'auto' ? [s.geminiModel] : []), ...models])].map((m) => <option key={m} value={m}>{m}{/pro/.test(m) ? ' (thông minh hơn, chậm, ít lượt miễn phí)' : /lite/.test(m) ? ' (nhanh nhất, nhẹ)' : /preview/.test(m) ? ' (thử nghiệm)' : ''}</option>)}
+                </select>
+                <button className="btn-ghost shrink-0" disabled={!s.geminiKey} onClick={async () => { const l = await listGeminiModels(s.geminiKey, { all: true }); setModels(l); setModelMsg(l.length ? '' : 'Không lấy được danh sách model – kiểm tra lại key.') }}>📋 Thêm model</button>
               </div>
               {modelMsg && <div className="text-xs text-rose-600">{modelMsg}</div>}
             </Field>
+            <div className="sm:col-span-2 space-y-2">
+              <button className="btn-ghost" disabled={!s.geminiKey || bench === 'run'} onClick={async () => { setBench('run'); setBenchRows([]); await benchmarkModels(setBenchRows); setBench('done') }}>{bench === 'run' ? '⏳ Đang đo…' : '⚡ Đo tốc độ AI trên máy này'}</button>
+              {benchRows.length > 0 && (
+                <div className="rounded-xl bg-slate-50 p-3 text-sm space-y-1">
+                  {[...benchRows].sort((x, y) => (x.ms ?? 1e9) - (y.ms ?? 1e9)).map((r, i) => (
+                    <div key={r.model} className="flex justify-between gap-3">
+                      <span>{i === 0 && r.ms ? '🏆 ' : ''}{r.model}</span>
+                      <span className={r.ms ? (r.ms < 2500 ? 'text-emerald-700' : r.ms < 6000 ? 'text-amber-700' : 'text-rose-700') : 'text-rose-700'}>{r.ms ? `${(r.ms / 1000).toFixed(1)} giây` : `❌ ${r.error}`}</span>
+                    </div>
+                  ))}
+                  {bench === 'done' && <div className="pt-1 text-xs text-slate-500">Chế độ ⚡ Tự động sẽ dùng model nhanh nhất ở trên. Kết quả được nhớ lại cho các lần sau.</div>}
+                </div>
+              )}
+            </div>
           </div>
         )}
         {s.aiProvider === 'openai' && (

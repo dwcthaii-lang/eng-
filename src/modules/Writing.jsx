@@ -14,6 +14,7 @@ import { aiEnabled, gradeWriting } from '../lib/ai'
 import { checkGrammar, applyFixes } from '../lib/grammar'
 import { today } from '../lib/date'
 import { useMic, MicButton, LiveTranscript } from '../components/Mic'
+import { Elapsed } from '../components/Elapsed'
 import { PageHeader, SessionTimer, TierChip } from '../components/ui'
 
 const TABS = [
@@ -135,7 +136,7 @@ function Journal() {
           <button className="btn-primary" disabled={normalize(text).length < 15} onClick={submit}>Lưu {aiEnabled() ? '& nhờ AI sửa' : ''}</button>
           <span className="text-xs text-slate-500">{normalize(text).length} từ</span>
         </div>
-        {fb?.loading && <div className="text-sm text-slate-500">🤖 AI đang sửa…</div>}
+        {fb?.loading && <div className="text-sm text-slate-500">🤖 AI đang sửa…<Elapsed /></div>}
         {fb?.error && <div className="text-sm text-rose-600">AI lỗi: {fb.error}</div>}
         {fb?.corrected && (
           <div className="rounded-xl bg-indigo-50 p-3 text-sm space-y-2">

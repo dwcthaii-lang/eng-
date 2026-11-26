@@ -55,7 +55,7 @@ function candidates(w) {
 async function fetchDictionary(word) {
   for (const c of candidates(word)) {
     try {
-      const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(c)}`)
+      const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(c)}`, { signal: AbortSignal.timeout?.(8000) })
       if (!r.ok) continue
       const data = await r.json()
       if (!Array.isArray(data) || !data.length) continue
@@ -82,18 +82,27 @@ async function fetchDictionary(word) {
   return null
 }
 
-async function fetchVi(word, context) {
-  if (aiEnabled()) {
-    try {
-      const r = await askJson(
-        'You are an English-Vietnamese learner dictionary. Return JSON only.',
-        `Word/phrase: "${word}"\nContext: "${context || ''}"\nReturn JSON: {"vi": "nghĩa tiếng Việt ngắn gọn (theo ngữ cảnh nếu có)", "pos": "part of speech in English", "ipaUS": "/.../", "ipaUK": "/.../", "example": "a natural everyday example sentence", "exampleVi": "dịch câu ví dụ"}`
-      )
-      if (r?.vi) return { ...r, by: 'AI' }
-    } catch {}
-  }
+// AI tra nghĩa theo ngữ cảnh (chạy SAU, không bắt cửa sổ tra từ phải chờ)
+const aiWordCache = {}
+export async function lookupWordAI(word, context = '') {
+  const k = word.toLowerCase() + '|' + context.slice(0, 80)
+  if (aiWordCache[k]) return aiWordCache[k]
+  const r = await askJson(
+    'You are an English-Vietnamese learner dictionary for spoken English. Return JSON only.',
+    `Word/phrase: "${word}"\nContext sentence: "${context.slice(0, 300)}"\nReturn JSON: {"vi": "nghĩa tiếng Việt ngắn gọn, đúng nghĩa trong ngữ cảnh", "pos": "part of speech in English", "note_vi": "1 câu: dùng khi nào / sắc thái", "example": "a natural everyday example sentence", "exampleVi": "dịch câu ví dụ tự nhiên"}`,
+    { maxMs: 25000 }
+  )
+  if (r?.vi) aiWordCache[k] = { ...r, by: 'AI' }
+  return aiWordCache[k] || null
+}
+
+async function fetchVi(word) {
   try {
-    const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|vi`)
+    const t = await translateText(word)
+    if (t?.vi && t.vi.toLowerCase() !== word.toLowerCase()) return { vi: t.vi, by: t.by }
+  } catch {}
+  try {
+    const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|vi`, { signal: AbortSignal.timeout?.(8000) })
     const d = await r.json()
     const t = d?.responseData?.translatedText
     if (t && t.toLowerCase() !== word.toLowerCase()) return { vi: t, by: 'MyMemory' }
@@ -106,7 +115,7 @@ export async function lookupWord(raw, context = '') {
   if (!word) return null
   const key = word.toLowerCase()
   if (cache[key] && !context) return { ...cache[key], local: localVi(word) }
-  const [dict, vi] = await Promise.all([fetchDictionary(word), localVi(word) ? Promise.resolve(null) : fetchVi(word, context)])
+  const [dict, vi] = await Promise.all([fetchDictionary(word), localVi(word) ? Promise.resolve(null) : fetchVi(word)])
   const res = { word, dict, vi, at: Date.now() }
   if (dict || vi) save(key, res)
   return { ...res, local: localVi(word) }
@@ -140,7 +149,7 @@ export async function translateText(en) {
   } catch {}
   if (!out && aiEnabled()) {
     try {
-      const r = await askJson('Translate English to natural, everyday Vietnamese. Return JSON only.', `Sentence: "${key}"\nReturn JSON: {"vi": "..."}`)
+      const r = await askJson('Translate English to natural, everyday Vietnamese. Return JSON only.', `Sentence: "${key}"\nReturn JSON: {"vi": "..."}`, { maxMs: 20000 })
       if (r?.vi) out = { vi: String(r.vi), by: 'AI' }
     } catch {}
   }
@@ -192,7 +201,8 @@ async function flushNatural(ctx) {
 - Translate idioms and fillers by meaning: "Will do" → "Ok, để mình làm", "Cool" → "Ok"/"Được đó", "kinda" → "kiểu như"/"hơi", "Lemme know" → "Báo mình nhé", "heads-up" → "báo trước", "Seriously?" → "Thật á?".
 - Keep technical terms commonly used in Vietnamese labs (wafer, SEM, cleanroom…) if Vietnamese engineers would say them in English.
 - Short, smooth sentences; no explanations. Return JSON only: {"vi": ["…", …]} with exactly the same number and order as the input lines.`,
-        `Context / full conversation (for meaning and tone):\n${ctx || '(none)'}\n\nLines to translate (JSON array):\n${JSON.stringify(batch)}`
+        `Context / full conversation (for meaning and tone):\n${ctx || '(none)'}\n\nLines to translate (JSON array):\n${JSON.stringify(batch)}`,
+        { maxMs: 25000 }
       )
       out = Array.isArray(r?.vi) ? r.vi : []
     } catch {}

@@ -4,6 +4,7 @@ import { getEnrich } from '../data/enrich'
 import { useStore, update } from '../lib/store'
 import { vocabId } from '../lib/srs'
 import { speak } from '../lib/speech'
+import { Elapsed } from './Elapsed'
 import { aiEnabled, enrichChunk } from '../lib/ai'
 
 function Row({ label, items, color }) {
@@ -58,7 +59,7 @@ export function ChunkCluster({ en, vi, compact = false }) {
           )}
         </>
       ) : aiEnabled() ? (
-        <button className="btn-ghost !py-1 text-xs" onClick={expand} disabled={loading}>{loading ? 'Đang tạo…' : '✨ Mở rộng cụm từ bằng AI (đồng nghĩa, ví dụ…)'}</button>
+        <button className="btn-ghost !py-1 text-xs" onClick={expand} disabled={loading}>{loading ? <>Đang tạo…<Elapsed /></> : '✨ Mở rộng cụm từ bằng AI (đồng nghĩa, ví dụ…)'}</button>
       ) : (
         <div className="text-xs text-slate-400">Chưa có dữ liệu mở rộng. Nhập API key trong Cài đặt để AI tạo đồng nghĩa, trái nghĩa và ví dụ.</div>
       )}

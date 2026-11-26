@@ -6,7 +6,7 @@ const KEY = 'english-reflex:v1'
 export const defaultSettings = {
   aiProvider: 'none', // 'none' | 'gemini' | 'openai'
   geminiKey: '',
-  geminiModel: 'gemini-3.8-flash',
+  geminiModel: 'auto',
   openaiKey: '',
   openaiModel: 'gpt-4o-mini',
   voiceA: '', // tên giọng đọc nhân vật A
@@ -50,7 +50,10 @@ function load() {
     const raw = localStorage.getItem(KEY)
     if (!raw) return structuredClone(initial)
     const data = JSON.parse(raw)
-    return { ...structuredClone(initial), ...data, settings: { ...defaultSettings, ...(data.settings || {}) } }
+    const settings = { ...defaultSettings, ...(data.settings || {}) }
+    // Một lần: chuyển sang chọn model AI tự động (nhanh nhất)
+    if (!settings.aiAutoModel) { settings.geminiModel = 'auto'; settings.aiAutoModel = true }
+    return { ...structuredClone(initial), ...data, settings }
   } catch {
     return structuredClone(initial)
   }

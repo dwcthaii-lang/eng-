@@ -3,7 +3,8 @@
 // 2) Bôi chọn một từ/cụm từ trên trang → cửa sổ nhỏ: phiên âm, nghĩa tiếng Việt, loại từ, ví dụ, loa
 // Từ lưu lại → vào kho từ (nguồn 'pron') → có lịch ôn lặp lại ngắt quãng như mọi từ khác.
 import { useEffect, useRef, useState } from 'react'
-import { lookupWord, pronounce, posVi, cleanWord } from '../lib/dict'
+import { lookupWord, lookupWordAI, pronounce, posVi, cleanWord } from '../lib/dict'
+import { aiEnabled } from '../lib/ai'
 import { useStore, update } from '../lib/store'
 import { today, addDays } from '../lib/date'
 import { seedVocab, recordSpoken, vocabId, isDue } from '../lib/srs'
@@ -80,6 +81,7 @@ function TryMic({ word, onResult }) {
 export function LookupCard({ word, context = '' }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [aiInfo, setAiInfo] = useState(null)
   const vocab = useStore((s) => s.vocab)
   const saved = vocab[vocabId(word)]
   const isPron = saved?.sources.includes(SRC)
@@ -87,16 +89,21 @@ export function LookupCard({ word, context = '' }) {
   useEffect(() => {
     let alive = true
     setLoading(true)
+    setAiInfo(null)
     lookupWord(word, context).then((d) => { if (alive) { setData(d); setLoading(false) } }).catch(() => alive && setLoading(false))
+    if (aiEnabled()) {
+      setAiInfo({ loading: true })
+      lookupWordAI(word, context).then((r) => alive && setAiInfo(r || null), () => alive && setAiInfo(null))
+    }
     return () => { alive = false }
   }, [word, context])
 
   const info = data?.dict
-  const vi = data?.local?.vi || data?.vi?.vi
+  const vi = data?.local?.vi || (aiInfo?.vi) || data?.vi?.vi
   const ipaUS = info?.ipaUS || data?.vi?.ipaUS
   const ipaUK = info?.ipaUK || data?.vi?.ipaUK
-  const posList = info?.meanings?.map((m) => m.pos) || (data?.vi?.pos ? [data.vi.pos] : [])
-  const aiEx = data?.vi?.example
+  const posList = info?.meanings?.map((m) => m.pos) || (aiInfo?.pos ? [aiInfo.pos] : [])
+  const aiEx = aiInfo?.example
   const exLocal = data?.local?.ex
 
   return (
@@ -111,10 +118,11 @@ export function LookupCard({ word, context = '' }) {
       {loading && <div className="text-slate-400">⏳ Đang tra từ điển…</div>}
       {!loading && (
         <>
-          {vi && <div><span className="text-slate-500">Nghĩa:</span> <b>{vi}</b>{data?.vi?.by && !data?.local?.vi && <span className="ml-1 text-[10px] text-slate-400">({data.vi.by})</span>}</div>}
+          {vi && <div><span className="text-slate-500">Nghĩa:</span> <b>{vi}</b>{!data?.local?.vi && !aiInfo?.vi && <span className="ml-1 text-[10px] text-slate-400">(dịch máy{aiInfo?.loading ? ' · AI đang tra theo ngữ cảnh…' : ''})</span>}</div>}
+          {aiInfo?.note_vi && <div className="text-slate-600">💡 {aiInfo.note_vi}</div>}
           {posList.length > 0 && <div className="flex flex-wrap gap-1">{[...new Set(posList)].map((p) => <span key={p} className="chip bg-indigo-50 text-indigo-700">{posVi(p)}</span>)}</div>}
           {exLocal && <Example en={exLocal} />}
-          {aiEx && <Example en={aiEx} vi={data.vi.exampleVi} />}
+          {aiEx && <Example en={aiEx} vi={aiInfo.exampleVi} />}
           {info?.meanings?.slice(0, 3).map((m) => (
             <div key={m.pos} className="rounded-lg bg-slate-50 p-2">
               <div className="text-[11px] font-semibold uppercase text-slate-500">{posVi(m.pos)} · {m.pos}</div>

@@ -9,6 +9,7 @@ import { speak } from '../lib/speech'
 import { aiEnabled, gradeTranslation, lookupPhrase } from '../lib/ai'
 import { checkGrammar, applyFixes } from '../lib/grammar'
 import { today } from '../lib/date'
+import { Elapsed } from '../components/Elapsed'
 import { TierChip } from '../components/ui'
 
 export default function Translate({ id }) {
@@ -73,22 +74,30 @@ function TranslateTask({ item }) {
     const terms = item.glossary.map(([, en]) => en)
     const used = terms.filter((en) => chunkUsed(en, text))
     const out = { sim: Math.round(sim * 100), used, terms }
+    // AI chấm song song với LanguageTool; kết quả LanguageTool hiện trước, AI hiện sau (không bắt chờ)
+    const aiP = aiEnabled() ? gradeTranslation({ vi: item.vi, reference: item.en, text }).then((r) => ({ r }), (e) => ({ e })) : null
     if (settings.grammarCheck) {
       try { out.grammar = await checkGrammar(text) } catch (e) { out.grammarError = String(e.message || e) }
     }
-    if (aiEnabled()) {
-      try { out.ai = await gradeTranslation({ vi: item.vi, reference: item.en, text }) } catch (e) { out.aiError = String(e.message || e) }
+    const schedule = (ai) => {
+      // Mức nhớ 0–5 cho lịch ôn
+      let grade = ai?.score != null ? ai.score / 2 : 5 * (0.5 * (used.length / terms.length) + 0.5 * Math.min(1, sim / 0.6))
+      grade -= (shownHints / Math.max(1, terms.length)) * 2
+      scheduleReview('translate', item.id, Math.max(0, grade), `✍️ ${item.titleVi}`)
     }
-    // Mức nhớ 0–5 cho lịch ôn
-    let grade = out.ai?.score != null ? out.ai.score / 2 : 5 * (0.5 * (used.length / terms.length) + 0.5 * Math.min(1, sim / 0.6))
-    grade -= (shownHints / Math.max(1, terms.length)) * 2
-    scheduleReview('translate', item.id, Math.max(0, grade), `✍️ ${item.titleVi}`)
     update((s) => {
       const r = s.translations[item.id] || (s.translations[item.id] = { attempts: 0 })
       r.attempts += 1
       r.last = text
       r.lastAt = Date.now()
     })
+    if (aiP) {
+      out.aiLoading = true
+      aiP.then(({ r, e }) => {
+        setResult((x) => (x ? { ...x, aiLoading: false, ai: r, aiError: e ? String(e.message || e) : undefined } : x))
+        schedule(r)
+      })
+    } else schedule(null)
     logHistory('translate', `${item.titleVi} · khớp ${out.sim}%`)
     setResult(out)
     setBusy(false)
@@ -159,6 +168,7 @@ function TranslateTask({ item }) {
             {!settings.grammarCheck && <div className="text-xs text-slate-400">Bật “Sửa ngữ pháp bằng LanguageTool” trong Cài đặt.</div>}
           </div>
 
+          {result.aiLoading && <div className="text-sm text-slate-500">🤖 AI đang chấm bản dịch…<Elapsed /></div>}
           {result.aiError && <div className="text-sm text-rose-600">AI lỗi: {result.aiError}</div>}
           {result.ai && (
             <div className="rounded-xl bg-indigo-50 p-3 text-sm space-y-2">

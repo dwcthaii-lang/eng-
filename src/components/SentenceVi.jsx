@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { translateText, translateNatural, cachedTranslation } from '../lib/dict'
 import { aiEnabled } from '../lib/ai'
 import { useStore } from '../lib/store'
+import { Elapsed } from './Elapsed'
 
 export function SentenceVi({ en, vi, ctx = '', className = '' }) {
   const show = useStore((s) => s.settings.showSentenceVi)
@@ -27,7 +28,7 @@ export function SentenceVi({ en, vi, ctx = '', className = '' }) {
   return (
     <div data-no-lookup className={`text-base text-slate-500 ${className}`}>
       🇻🇳 {res ? res.vi : failed ? <span className="text-xs">(chưa dịch được – kiểm tra mạng)</span> : <span className="text-xs">đang dịch…</span>}
-      {res && res.by === 'Google' && (polishing ? <span className="ml-1 text-[10px] text-indigo-400 animate-pulse">· AI đang dịch mượt hơn…</span> : <span className="ml-1 text-[10px] text-slate-400" title="Nhập API key Gemini trong Cài đặt để AI dịch tự nhiên theo ngữ cảnh">(dịch máy)</span>)}
+      {res && res.by === 'Google' && (polishing ? <span className="ml-1 text-[10px] text-indigo-400 animate-pulse">· AI đang dịch mượt hơn…<Elapsed /></span> : <span className="ml-1 text-[10px] text-slate-400" title="Nhập API key Gemini trong Cài đặt để AI dịch tự nhiên theo ngữ cảnh">(dịch máy)</span>)}
     </div>
   )
 }

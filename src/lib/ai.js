@@ -15,16 +15,180 @@ function extractJson(text) {
 }
 
 export let lastUsedModel = ''
-const FIRST_MS = 12000 // phải có chữ đầu tiên trong 12 giây, nếu không chuyển model
-const TOTAL_MS = 90000 // tối đa cho cả lượt (kể cả chuyển model, sinh bài dài)
-const goodModel = {} // model đã chạy tốt trong phiên này (tránh gọi lại model đang quá tải)
-const thinkIdx = {}
-// Tắt/giảm "suy nghĩ" để có chữ đầu tiên nhanh (thử lần lượt, model không nhận thì bỏ)
+
+// ───────── Bộ định tuyến model Gemini: luôn chọn model ĐANG NHANH NHẤT ─────────
+// - Ghi lại thời gian ra chữ đầu tiên (TTFT) của từng model trên máy bạn → lần sau ưu tiên model nhanh
+// - "Gửi dự phòng" (hedging): sau HEDGE_MS chưa có chữ nào → gửi song song sang model kế tiếp, cái nào trả lời trước thì dùng
+// - Model lỗi/quá tải bị tạm gác 10 phút
+const STATS_KEY = 'english-reflex:aistats'
+const HEDGE_MS = 3500
+const MAX_PARALLEL = 3
+let stats = {}
+try { stats = JSON.parse(localStorage.getItem(STATS_KEY) || '{}') } catch {}
+const saveStats = () => { try { localStorage.setItem(STATS_KEY, JSON.stringify(stats)) } catch {} }
+const st = (m) => (stats[m] ||= { ttft: 0, n: 0, failAt: 0, think: 0 })
+function recordOk(model, ms) { const x = st(model); x.ttft = x.n ? Math.round(x.ttft * 0.6 + ms * 0.4) : ms; x.n++; x.failAt = 0; saveStats() }
+// model thua vì chậm: ghi nhận ít nhất bằng thời gian đã chờ → lần sau xếp sau
+function recordSlow(model, ms) { const x = st(model); x.ttft = Math.max(x.ttft, ms); x.n = Math.max(1, x.n); saveStats() }
+function recordFail(model) { st(model).failAt = Date.now(); saveStats() }
+export function modelStats() { return stats }
+
+let modelListCache = null
+async function candidateModels(s) {
+  if (!modelListCache) {
+    const cached = (() => { try { return JSON.parse(localStorage.getItem('english-reflex:models') || 'null') } catch { return null } })()
+    if (cached && Date.now() - cached.at < 86400000 && cached.key === s.geminiKey.slice(-6)) modelListCache = cached.list
+    else {
+      const list = await listGeminiModels(s.geminiKey)
+      if (list.length) { modelListCache = list; try { localStorage.setItem('english-reflex:models', JSON.stringify({ at: Date.now(), key: s.geminiKey.slice(-6), list })) } catch {} }
+    }
+  }
+  const pool = [...new Set([...(s.geminiModel && s.geminiModel !== 'auto' ? [s.geminiModel] : []), ...(modelListCache || []), 'gemini-3.8-flash', 'gemini-3.8-flash-lite'])]
+  const now = Date.now()
+  const score = (m) => {
+    const x = stats[m]
+    let v = x?.n ? x.ttft : 6000 // chưa đo: coi như 6 giây
+    if (x?.failAt && now - x.failAt < 600000) v += 60000 // vừa lỗi: xếp cuối
+    if (m === s.geminiModel) v -= 1500 // ưu tiên nhẹ model bạn chọn
+    return v
+  }
+  return pool.sort((a, b) => score(a) - score(b))
+}
+
+// Tắt/giảm "suy nghĩ" để có chữ đầu tiên nhanh (thử lần lượt, model không nhận thì bỏ; nhớ lại lựa chọn)
 function thinkingOptions(model) {
   const v = parseFloat((model.match(/^gemini-([\d.]+)/) || [])[1] || '0')
   if (v >= 3) return /pro/.test(model) ? [{ thinkingLevel: 'low' }, null] : [{ thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, null]
   if (v >= 2.5) return /pro/.test(model) ? [{ thinkingBudget: 128 }, null] : [{ thinkingBudget: 0 }, null]
   return [null]
+}
+
+// Một lần gọi tới MỘT model (stream). onFirst() khi có chữ đầu tiên; onText(text) mỗi lần có thêm chữ
+function attemptModel({ model, key, system, user, json, temperature, onFirst, onText }) {
+  const ctrl = new AbortController()
+  const t0 = Date.now()
+  const run = async () => {
+    const opts = thinkingOptions(model)
+    for (let tries = 0; tries < 4; tries++) {
+      if (ctrl.signal.aborted) throw new Error('aborted')
+      const think = opts[Math.min(st(model).think || 0, opts.length - 1)]
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: ctrl.signal,
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: { temperature, ...(json ? { responseMimeType: 'application/json' } : {}), ...(think ? { thinkingConfig: think } : {}) },
+        }),
+      })
+      if (!res.ok) {
+        const body = (await res.text()).slice(0, 300)
+        if (res.status === 400 && think && /think/i.test(body)) { st(model).think = (st(model).think || 0) + 1; saveStats(); continue }
+        const err = new Error(`Gemini lỗi ${res.status} (${model}): ${body.slice(0, 140)}`)
+        err.status = res.status
+        if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key|API_KEY/i.test(body))) err.fatal = true
+        throw err
+      }
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      let buf = '', text = '', got = false
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+        let i
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim()
+          buf = buf.slice(i + 1)
+          if (!line.startsWith('data:')) continue
+          try {
+            const d = JSON.parse(line.slice(5))
+            const t = (d.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought && p.text).map((p) => p.text).join('')
+            if (t) {
+              text += t
+              if (!got) { got = true; recordOk(model, Date.now() - t0); if (!onFirst(model)) { ctrl.abort(); throw new Error('aborted') } }
+              onText(model, text)
+            }
+          } catch (e) { if (e.message === 'aborted') throw e }
+        }
+      }
+      if (!text) throw new Error(`Model ${model} không trả lời.`)
+      return text
+    }
+    throw new Error(`Model ${model} không nhận cấu hình.`)
+  }
+  return { model, abort: () => ctrl.abort(), promise: run().catch((e) => { throw ctrl.signal.aborted ? new Error('aborted') : e }) }
+}
+
+// Gọi Gemini: chọn model nhanh nhất, gửi dự phòng song song khi chậm, trả về toàn bộ văn bản
+function geminiStream({ system, user, json = false, onText, temperature = 0.5, maxMs = 60000 }) {
+  const s = getState().settings
+  return new Promise(async (resolve, reject) => {
+    const queue = await candidateModels(s)
+    const live = new Map()
+    let winner = null, finished = false, lastErr = null, hedgeTimer = null
+    const t0 = Date.now()
+    const end = (fn, v) => { if (finished) return; finished = true; clearTimeout(hedgeTimer); clearTimeout(deadline); live.forEach((a) => a.abort()); fn(v) }
+    const deadline = setTimeout(() => end(reject, lastErr || new Error(`AI không trả lời trong ${Math.round(maxMs / 1000)} giây.`)), maxMs)
+    const launch = () => {
+      if (finished || winner) return
+      const model = queue.shift()
+      if (!model) { if (!live.size) end(reject, lastErr || new Error('Không có model AI nào dùng được.')); return }
+      const a = attemptModel({
+        model, key: s.geminiKey, system, user, json, temperature,
+        onFirst: (m) => {
+          if (winner && winner !== m) return false
+          winner = m
+          clearTimeout(hedgeTimer)
+          live.forEach((x, k) => { if (k !== m) { x.abort(); live.delete(k); recordSlow(k, Date.now() - x.t0) } })
+          return true
+        },
+        onText: (m, t) => { if (m === winner) onText?.(t) },
+      })
+      a.t0 = Date.now()
+      live.set(model, a)
+      a.promise.then(
+        (text) => { if (model === winner) { lastUsedModel = model; end(resolve, text) } },
+        (e) => {
+          live.delete(model)
+          if (finished || e.message === 'aborted') return
+          if (e.fatal) return end(reject, new Error('Gemini: API key không hợp lệ hoặc chưa được bật.'))
+          lastErr = e
+          recordFail(model)
+          if (model === winner) return end(reject, e) // đã đang viết mà đứt giữa chừng
+          launch() // lỗi → thử ngay model khác
+        }
+      )
+      // chưa có chữ sau HEDGE_MS → gửi thêm 1 model song song
+      clearTimeout(hedgeTimer)
+      hedgeTimer = setTimeout(() => { if (!winner && live.size < MAX_PARALLEL && Date.now() - t0 < maxMs) launch() }, HEDGE_MS)
+    }
+    launch()
+  })
+}
+
+// Đo tốc độ từng model (Cài đặt)
+export async function benchmarkModels(onRow) {
+  const s = getState().settings
+  const list = (await candidateModels(s)).slice(0, 6)
+  const rows = []
+  for (const model of list) {
+    const t0 = Date.now()
+    try {
+      await new Promise((resolve, reject) => {
+        const a = attemptModel({ model, key: s.geminiKey, system: 'Reply with one word.', user: 'Say OK', json: false, temperature: 0, onFirst: () => true, onText: () => {} })
+        const to = setTimeout(() => { a.abort(); reject(new Error('quá 20 giây')) }, 20000)
+        a.promise.then((v) => { clearTimeout(to); resolve(v) }, (e) => { clearTimeout(to); reject(e) })
+      })
+      rows.push({ model, ms: Date.now() - t0 })
+    } catch (e) {
+      recordFail(model)
+      rows.push({ model, error: String(e.message || e).slice(0, 80) })
+    }
+    onRow?.([...rows])
+  }
+  return rows
 }
 
 // Danh sách model Gemini dùng được với key này, ưu tiên bản "flash" mới nhất, ổn định
@@ -45,96 +209,15 @@ export async function listGeminiModels(key, { all = false } = {}) {
   }
 }
 
-// Gọi Gemini dạng STREAM: chữ về tới đâu báo tới đó (onText), tự chuyển model khi bận/chậm/ngừng
-async function geminiStream({ system, user, json = false, onText, temperature = 0.5 }) {
-  const s = getState().settings
-  const chosen = s.geminiModel || 'gemini-3.8-flash'
-  const models = [...new Set([goodModel[chosen] || chosen, chosen])]
-  const tried = new Set()
-  let discovered = false
-  let lastErr = null
-  const t0 = Date.now()
-  for (let mi = 0; mi < models.length && mi < 6; mi++) {
-    const model = models[mi]
-    if (tried.has(model)) continue
-    tried.add(model)
-    const opts = thinkingOptions(model)
-    for (let attempt = 0; attempt < 4; attempt++) {
-      if (Date.now() - t0 > TOTAL_MS) throw lastErr || new Error('AI phản hồi quá chậm.')
-      const think = opts[Math.min(thinkIdx[model] || 0, opts.length - 1)]
-      const ctrl = new AbortController()
-      let timer = setTimeout(() => ctrl.abort(), FIRST_MS)
-      let res
-      try {
-        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(s.geminiKey)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: ctrl.signal,
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: system }] },
-            contents: [{ role: 'user', parts: [{ text: user }] }],
-            generationConfig: { temperature, ...(json ? { responseMimeType: 'application/json' } : {}), ...(think ? { thinkingConfig: think } : {}) },
-          }),
-        })
-        if (res.ok) {
-          const reader = res.body.getReader()
-          const dec = new TextDecoder()
-          let buf = '', text = '', got = false
-          for (;;) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buf += dec.decode(value, { stream: true })
-            let i
-            while ((i = buf.indexOf('\n')) >= 0) {
-              const line = buf.slice(0, i).trim()
-              buf = buf.slice(i + 1)
-              if (!line.startsWith('data:')) continue
-              try {
-                const d = JSON.parse(line.slice(5))
-                const t = (d.candidates?.[0]?.content?.parts || []).filter((p) => !p.thought && p.text).map((p) => p.text).join('')
-                if (t) {
-                  text += t
-                  if (!got) { got = true; clearTimeout(timer); timer = setTimeout(() => ctrl.abort(), TOTAL_MS) }
-                  onText?.(text)
-                }
-              } catch {}
-            }
-          }
-          clearTimeout(timer)
-          if (!text) { lastErr = new Error(`Model ${model} không trả lời.`); break }
-          lastUsedModel = model
-          goodModel[chosen] = model
-          return text
-        }
-      } catch (e) {
-        clearTimeout(timer)
-        lastErr = new Error(e.name === 'AbortError' ? `Model ${model} trả lời quá chậm, đã chuyển model khác.` : `Lỗi mạng khi gọi Gemini: ${e.message}`)
-        break
-      }
-      clearTimeout(timer)
-      const body = (await res.text()).slice(0, 300)
-      lastErr = new Error(`Gemini lỗi ${res.status} (${model}): ${body.slice(0, 160)}`)
-      if (res.status === 400 && think && /think/i.test(body)) { thinkIdx[model] = (thinkIdx[model] || 0) + 1; continue }
-      if (res.status === 401 || res.status === 403 || (res.status === 400 && /api key|API_KEY/i.test(body))) throw new Error(`Gemini lỗi ${res.status}: API key không hợp lệ hoặc chưa được bật.`)
-      if (res.status === 503 && attempt === 0) { await new Promise((r) => setTimeout(r, 800)); continue }
-      break
-    }
-    if (!discovered && mi === models.length - 1) {
-      discovered = true
-      models.push(...(await listGeminiModels(s.geminiKey)).filter((m) => !tried.has(m)))
-    }
-  }
-  throw lastErr
-}
-
 // Văn bản tự do (có stream nếu dùng Gemini)
-export async function askText(system, user, onText) {
+export async function askText(system, user, onText, { maxMs = 60000 } = {}) {
   const s = getState().settings
-  if (s.aiProvider === 'gemini' && s.geminiKey) return geminiStream({ system, user, onText, temperature: 0.3 })
+  if (s.aiProvider === 'gemini' && s.geminiKey) return geminiStream({ system, user, onText, temperature: 0.3, maxMs })
   if (s.aiProvider === 'openai' && s.openaiKey) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.openaiKey}` },
+      signal: AbortSignal.timeout?.(60000),
       body: JSON.stringify({ model: s.openaiModel || 'gpt-4o-mini', temperature: 0.3, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
     })
     if (!res.ok) throw new Error(`OpenAI lỗi ${res.status}: ${(await res.text()).slice(0, 200)}`)
@@ -145,13 +228,14 @@ export async function askText(system, user, onText) {
   throw new Error('Chưa cấu hình API key trong Cài đặt')
 }
 
-export async function askJson(system, user) {
+export async function askJson(system, user, { maxMs = 60000 } = {}) {
   const s = getState().settings
-  if (s.aiProvider === 'gemini' && s.geminiKey) return extractJson(await geminiStream({ system, user, json: true, temperature: 0.7 }))
+  if (s.aiProvider === 'gemini' && s.geminiKey) return extractJson(await geminiStream({ system, user, json: true, temperature: 0.7, maxMs }))
   if (s.aiProvider === 'openai' && s.openaiKey) {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.openaiKey}` },
+      signal: AbortSignal.timeout?.(60000),
       body: JSON.stringify({
         model: s.openaiModel || 'gpt-4o-mini',
         response_format: { type: 'json_object' },
@@ -193,6 +277,8 @@ export function roleplayTurn({ scenario, history }) {
     `You play ${scenario.aiName}, ${scenario.aiRoleEn}. Scenario: ${scenario.setupEn}. ${LEARNER}
 Speak naturally like a real person (contractions, casual or academic register as fits), 1-2 short sentences per turn, max 35 words, and always end with something the learner must respond to. Return JSON only.`,
     `Conversation so far:\n${convo}\n\nWrite your next line. Return JSON: {"reply": "your line", "hint": ["2-3 English keywords/chunks the learner could use to answer"], "end": boolean (true if the conversation reached a natural ending)}`
+  ,
+    { maxMs: 30000 }
   )
 }
 
@@ -274,7 +360,9 @@ Schema:
    "chunks": [3 x {"en":"...","vi":"..."}],
    "lines": [5-7 x {"s": "A" or "B", "t": "line text"}]
  },
- "roleplay": {"aiName": "...", "aiRoleEn": "who the AI plays", "roleVi": "vai (tiếng Việt)", "setupEn": "scenario", "goalVi": "mục tiêu", "turns": [4 x {"ai": "AI line ending with something to respond to", "hint": ["2-3 keywords"], "model": "natural learner reply"}]}
+ "roleplay": {"aiName": "...", "aiRoleEn": "who the AI plays", "roleVi": "vai (tiếng Việt,
+    { maxMs: 90000 }
+  )", "setupEn": "scenario", "goalVi": "mục tiêu", "turns": [4 x {"ai": "AI line ending with something to respond to", "hint": ["2-3 keywords"], "model": "natural learner reply"}]}
 }
 Listening line markup rules (IMPORTANT):
 - Put 4-6 connected-speech gaps across the lines using [[spoken form|accepted alternatives comma separated|Vietnamese explanation of the linking/reduction]], e.g. [[gonna|going to|going to → gonna: 'to' giảm thành /ə/]] or [[did you|didja|did you → /ˈdɪdʒə/: /d/ + /j/ thành /dʒ/]].
@@ -292,6 +380,8 @@ export function generateUnitItems({ title, levelName, existing, count = 15 }) {
 Already learned (do NOT repeat): ${existing.join('; ')}
 Give ${count} NEW high-frequency words, collocations, phrasal verbs or short everyday sentences that native speakers really use for this topic at this level.
 Return JSON: {"items": [{"en": "word/chunk", "vi": "nghĩa tiếng Việt ngắn gọn", "ex": "one natural spoken example sentence that CONTAINS the exact chunk"}]}`
+  ,
+    { maxMs: 90000 }
   )
 }
 
@@ -318,7 +408,7 @@ Context: ${context}
 Target chunks: ${chunks.join('; ')}
 Reference answer: ${model}
 Learner said: "${transcript}"`
-  return askText(system, user, (t) => onPartial?.(parseReview(t))).then(parseReview)
+  return askText(system, user, (t) => onPartial?.(parseReview(t)), { maxMs: 45000 }).then(parseReview)
 }
 
 const num = (x) => { const n = parseFloat(x); return Number.isFinite(n) ? Math.max(0, Math.min(10, Math.round(n))) : undefined }
