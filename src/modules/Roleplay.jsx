@@ -13,7 +13,7 @@ import { useHotkeys } from '../lib/hotkeys'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { Elapsed } from '../components/Elapsed'
 import { quickFix } from '../components/SentenceReview'
-import { PageHeader, SessionTimer, TierChip, Shortcuts } from '../components/ui'
+import { FreqGroups, PageHeader, SessionTimer, TierChip, Shortcuts } from '../components/ui'
 
 export default function Roleplay({ id }) {
   const [mode, setMode] = useState(null)
@@ -34,18 +34,16 @@ function RoleplayList() {
       {TIER_IDS.map((tier) => (
         <div key={tier} className="mb-8">
           <div className="label mb-3">{TIERS[tier].label}</div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {situations.filter((s) => s.tier === tier).map((s) => (
+          <FreqGroups items={situations.filter((s) => s.tier === tier)} render={(s) => (
               <a key={s.id} href={`#/roleplay/${s.id}`} className="card hover:border-indigo-300 hover:shadow transition flex items-center gap-4">
                 <div className="text-3xl">{s.emoji}</div>
                 <div className="flex-1">
                   <div className="font-semibold">{s.titleVi}</div>
-                  <div className="text-xs text-slate-500">Vai AI: {s.roleplay.roleVi} ({s.roleplay.aiName})</div>
+                  <div className="text-xs text-slate-500">Vai AI: {s.roleplay.roleVi} ({s.roleplay.aiName}){s.cat ? ` · ${s.cat}` : ''}</div>
                 </div>
                 {reviews[`roleplay:${s.id}`]?.due <= t ? <span className="chip bg-rose-100 text-rose-700">📅 Cần ôn</span> : progress[s.id]?.count > 0 && <span className="chip bg-emerald-100 text-emerald-700">✓ {nextDueLabel(reviews[`roleplay:${s.id}`])}</span>}
               </a>
-            ))}
-          </div>
+            )} />
           <EndlessCard kind="situation" tier={tier} label="nhập vai" total={situations.filter((s) => s.tier === tier).length} done={situations.filter((s) => s.tier === tier && progress[s.id]?.count > 0).length} hrefFor={(it) => `#/roleplay/${it.id}`} />
         </div>
       ))}

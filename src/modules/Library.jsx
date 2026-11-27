@@ -23,7 +23,7 @@ export function normalizeSituation(raw, tier) {
   const turns = (R.turns || []).map((x) => ({ ai: String(x.ai || ''), hint: (x.hint || []).slice(0, 3).map(String), model: String(x.model || '') })).filter((x) => x.ai)
   if (!recall.length || lines.length < 3 || !turns.length) throw new Error('Dữ liệu bài học chưa đủ (cần thẻ nói, bài nghe ≥3 câu, nhập vai).')
   return {
-    id, tier: t, custom: true, emoji: String(raw.emoji || '✨').slice(0, 4), title: String(raw.title || 'New situation'), titleVi: String(raw.titleVi || raw.title || 'Tình huống mới'),
+    id, tier: t, custom: true, freq: ['common', 'sometimes', 'rare'].includes(raw.freq) ? raw.freq : 'sometimes', cat: String(raw.cat || '').slice(0, 40), emoji: String(raw.emoji || '✨').slice(0, 4), title: String(raw.title || 'New situation'), titleVi: String(raw.titleVi || raw.title || 'Tình huống mới'),
     recall,
     listening: {
       speakers: { A: String(L.speakers?.A || 'Speaker A'), B: String(L.speakers?.B || 'Minh') },

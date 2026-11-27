@@ -32,7 +32,7 @@ function buildQueue({ tier, mode, size }) {
   const newLeft = mode === 'review' ? 0 : Math.max(0, s.settings.newRecallPerDay - newStartedToday('recall', s))
   const fresh = prompts.filter((p) => !seen(p)).slice(0, newLeft)
   // Ưu tiên ôn bài đến hạn, sau đó thêm tình huống mới (Tầng 1 trước)
-  fresh.sort((a, b) => a.tier - b.tier)
+  fresh.sort((a, b) => a.tier - b.tier || FR[a.freq] - FR[b.freq]) // tầng thấp + thường gặp trước
   const reactivateWords = Object.values(s.vocab).filter((v) => v.reactivate && v.stage !== 'mastered').slice(0, 2)
   const q = [
     ...due.map((p) => ({ type: 'prompt', id: p.id, prompt: p, review: true })),
@@ -52,6 +52,8 @@ function buildQueue({ tier, mode, size }) {
 function maskWord(en) {
   return en.split(' ').map((w) => w[0] + w.slice(1).replace(/[a-zA-Z]/g, '_')).join(' ')
 }
+
+const FR = { common: 0, sometimes: 1, rare: 2 }
 
 export default function Recall({ mode: routeMode }) {
   const settings = useStore((s) => s.settings)

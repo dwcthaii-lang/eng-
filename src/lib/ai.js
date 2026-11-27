@@ -606,7 +606,7 @@ export function generateTranslation({ tier, topicVi, avoid = [] }) {
 Topic (Vietnamese, may be empty → choose a realistic, useful one): "${topicVi || ''}"
 Already existing exercises (must be DIFFERENT): ${avoid.slice(-40).join('; ') || 'none'}
 The Vietnamese must sound like a real message/speech a Vietnamese student would write or say (natural Vietnamese, not translated-sounding). The English must be natural, idiomatic, the way a fluent speaker would say it${tier === 3 ? ' in a professional setting' : ''}.
-Return JSON: {"titleVi": "tiêu đề ngắn", "vi": "đoạn tiếng Việt", "en": "natural English translation", "glossary": [["cụm tiếng Việt khó", "natural English chunk used in 'en'"], … 5 items]}`,
+Return JSON: {"titleVi": "tiêu đề ngắn", "freq": "common|sometimes|rare", "vi": "đoạn tiếng Việt", "en": "natural English translation", "glossary": [["cụm tiếng Việt khó", "natural English chunk used in 'en'"], … 5 items]}`,
     { maxMs: 60000, temperature: 0.8 }
   )
 }
@@ -645,7 +645,7 @@ Already existing lessons (create something clearly DIFFERENT): ${avoid.slice(-40
 
 Schema:
 {
- "emoji": "one emoji", "title": "short English title", "titleVi": "short Vietnamese title",
+ "emoji": "one emoji", "title": "short English title", "titleVi": "short Vietnamese title", "freq": "common|sometimes|rare (how often a Vietnamese student in Taiwan meets this situation)", "cat": "nhóm chủ đề ngắn tiếng Việt, vd: Mua sắm & ăn uống, Dịch vụ công, Trường học, Phòng lab, Sức khoẻ & khẩn cấp, Sự nghiệp",
  "recall": [ 2 items: {"vi": "Vietnamese instruction describing what to say", "context": "Vietnamese context", "chunks": [3 x {"en": "natural chunk/collocation", "vi": "nghĩa"}], "model": "natural spoken model answer using all 3 chunks"} ],
  "listening": {
    "speakers": {"A": "Name (role)", "B": "Minh"},

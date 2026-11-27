@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getTranslations, useTranslations } from '../data/translations'
 import { EndlessCard } from '../components/Endless'
 import { seedVocab } from '../lib/srs'
-import { TIERS, TIER_IDS } from '../data'
+import { TIERS, TIER_IDS, findSituation } from '../data'
 import { useStore, update, getState, logHistory } from '../lib/store'
 import { scheduleReview, nextDueLabel } from '../lib/review'
 import { similarity, chunkUsed, normalize } from '../lib/text'
@@ -14,7 +14,7 @@ import { lookupViEn } from '../lib/dict'
 import { GradeView } from '../components/GradeView'
 import { today } from '../lib/date'
 import { Elapsed } from '../components/Elapsed'
-import { TierChip } from '../components/ui'
+import { TierChip, FreqGroups } from '../components/ui'
 
 export default function Translate({ id }) {
   const list = useTranslations()
@@ -32,8 +32,7 @@ function TranslateList() {
       {TIER_IDS.map((tier) => (
         <div key={tier}>
           <div className="label mb-2">{TIERS[tier].label}</div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {translationSet.filter((x) => x.tier === tier).map((x) => {
+          <FreqGroups cols="sm:grid-cols-2 !gap-2" items={translationSet.filter((x) => x.tier === tier).map((x) => ({ ...x, freq: x.freq || findSituation(x.situationId)?.freq }))} render={(x) => {
               const rv = reviews[`translate:${x.id}`]
               return (
                 <a key={x.id} href={`#/writing/translate/${x.id}`} className="card !p-4 flex items-center justify-between gap-3 hover:border-indigo-300">
@@ -41,8 +40,7 @@ function TranslateList() {
                   {rv ? <span className={`chip ${rv.due <= t ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>{rv.due <= t ? '📅 Cần ôn' : nextDueLabel(rv)}</span> : <span className="chip bg-slate-100 text-slate-600">Mới</span>}
                 </a>
               )
-            })}
-          </div>
+            }} />
           <EndlessCard kind="translation" tier={tier} label="đoạn dịch" total={translationSet.filter((x) => x.tier === tier).length} done={translationSet.filter((x) => x.tier === tier && reviews[`translate:${x.id}`]).length} hrefFor={(it) => `#/writing/translate/${it.id}`} />
         </div>
       ))}

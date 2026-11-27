@@ -21,7 +21,7 @@ export async function createSituation(tier, topic) {
 export function normalizeTranslation(raw, tier) {
   const glossary = (raw.glossary || []).map((g) => (Array.isArray(g) ? g : [g?.vi, g?.en])).map(([vi, en]) => [String(vi || ''), String(en || '')]).filter(([vi, en]) => vi && en).slice(0, 6)
   if (!raw.vi || !raw.en || String(raw.vi).length < 30) throw new Error('AI trả về đoạn dịch chưa đủ, thử lại nhé.')
-  return { id: `trc-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, tier, custom: true, titleVi: String(raw.titleVi || 'Đoạn mới'), vi: String(raw.vi), en: String(raw.en), glossary, createdAt: today() }
+  return { id: `trc-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, tier, custom: true, freq: ['common', 'sometimes', 'rare'].includes(raw.freq) ? raw.freq : 'sometimes', titleVi: String(raw.titleVi || 'Đoạn mới'), vi: String(raw.vi), en: String(raw.en), glossary, createdAt: today() }
 }
 
 export async function createTranslation(tier, topic) {

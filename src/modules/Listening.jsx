@@ -18,7 +18,7 @@ import { useHotkeys } from '../lib/hotkeys'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
 import { GradeView } from '../components/GradeView'
 import { Elapsed } from '../components/Elapsed'
-import { PageHeader, SessionTimer, TierChip, Shortcuts } from '../components/ui'
+import { FreqGroups, PageHeader, SessionTimer, TierChip, Shortcuts } from '../components/ui'
 
 export default function Listening({ id }) {
   if (id && findSituation(id)) return <Player sit={findSituation(id)} />
@@ -35,8 +35,7 @@ function ListeningList() {
       {TIER_IDS.map((tier) => (
         <div key={tier} className="mb-8">
           <div className="label mb-3">{TIERS[tier].label}</div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {situations.filter((s) => s.tier === tier).map((s) => {
+          <FreqGroups items={situations.filter((s) => s.tier === tier)} render={(s) => {
               const p = progress[s.id]
               const rv = reviews[`listening:${s.id}`]
               const due = rv && rv.due <= today()
@@ -45,13 +44,12 @@ function ListeningList() {
                   <div className="text-3xl">{s.emoji}</div>
                   <div className="flex-1">
                     <div className="font-semibold">{s.titleVi}</div>
-                    <div className="text-xs text-slate-500">{s.listening.speakers.A} · {s.listening.lines.length} lượt thoại</div>
+                    <div className="text-xs text-slate-500">{s.listening.speakers.A} · {s.listening.lines.length} lượt thoại{s.cat ? ` · ${s.cat}` : ''}</div>
                   </div>
                   {due ? <span className="chip bg-rose-100 text-rose-700">📅 Cần ôn</span> : p?.done ? <span className="chip bg-emerald-100 text-emerald-700" title={nextDueLabel(rv)}>✓ {nextDueLabel(rv)}</span> : p?.step ? <span className="chip bg-amber-100 text-amber-800">Bước {p.step}/3</span> : null}
                 </a>
               )
-            })}
-          </div>
+            }} />
           <EndlessCard kind="situation" tier={tier} label="bài nghe" total={situations.filter((s) => s.tier === tier).length} done={situations.filter((s) => s.tier === tier && progress[s.id]?.done).length} hrefFor={(it) => `#/listening/${it.id}`} />
         </div>
       ))}

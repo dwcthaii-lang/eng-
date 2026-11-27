@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { STAGES } from '../lib/srs'
-import { TIERS } from '../data'
+import { TIERS, FREQS, freqOf } from '../data'
 
 export function PageHeader({ title, subtitle, right }) {
   return (
@@ -58,6 +58,24 @@ export function Shortcuts({ items }) {
           <span className="kbd">{k}</span> {label}
         </span>
       ))}
+    </div>
+  )
+}
+
+// Nhóm bài theo mức độ thường gặp: Thường gặp → Thỉnh thoảng → Hiếm khi
+export function FreqGroups({ items, render, cols = 'sm:grid-cols-2' }) {
+  return (
+    <div className="space-y-4">
+      {FREQS.map(([k, label, hint]) => {
+        const list = items.filter((x) => freqOf(x) === k)
+        if (!list.length) return null
+        return (
+          <div key={k}>
+            <div className="mb-2 flex items-baseline gap-2"><span className="text-sm font-semibold">{label}</span><span className="text-xs text-slate-500">{hint} · {list.length} bài</span></div>
+            <div className={`grid gap-3 ${cols}`}>{list.map(render)}</div>
+          </div>
+        )
+      })}
     </div>
   )
 }
