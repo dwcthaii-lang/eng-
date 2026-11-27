@@ -2,7 +2,7 @@
 // Mỗi bài đã học (thẻ nói, bài nghe, nhập vai, đoạn dịch) có lịch ôn riêng.
 // grade 0–5: 0–2 = quên/khó (ôn lại ngày mai), 3 = tạm, 4 = tốt, 5 = rất dễ
 import { update, getState } from './store'
-import { today, addDays } from './date'
+import { today, addDays, daysBetween } from './date'
 
 export const REVIEW_TYPES = {
   recall: { label: 'Thẻ nói', icon: '🗣️', href: (r) => '#/recall/review' },
@@ -35,7 +35,10 @@ export function scheduleReview(type, refId, grade, title = '') {
       r.interval = 1
     } else {
       r.reps += 1
-      r.interval = r.reps === 1 ? 1 : r.reps === 2 ? 3 : Math.round(r.interval * r.ease)
+      // Ôn trễ mà vẫn nhớ tốt → được tính thêm một nửa số ngày trễ (bạn đã nhớ lâu hơn dự kiến)
+      const late = r.reps > 0 ? Math.max(0, daysBetween(r.due, t)) : 0
+      const base = r.interval + (grade >= 4 ? late * 0.5 : 0)
+      r.interval = r.reps === 1 ? Math.max(1, Math.round(1 + (grade >= 4 ? late * 0.5 : 0))) : r.reps === 2 ? Math.max(3, Math.round(3 + (grade >= 4 ? late * 0.5 : 0))) : Math.round(base * r.ease)
     }
     r.ease = Math.max(1.3, r.ease + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02)))
     r.interval = Math.min(r.interval, 120)
@@ -68,4 +71,37 @@ export function nextDueLabel(r) {
   const t = today()
   if (r.due <= t) return 'Đến hạn hôm nay'
   return `Ôn lại ${r.due.slice(8, 10)}/${r.due.slice(5, 7)}`
+}
+
+// ── Ngày nghỉ (chưa kịp học): cả lịch ôn lùi lại 1 ngày cho mỗi ngày nghỉ → không bị dồn bài
+export function isDayOff(d, state = getState()) {
+  return (state.daysOff || []).includes(d)
+}
+export function setDayOff(d, on) {
+  update((s) => {
+    s.daysOff ||= []
+    const has = s.daysOff.includes(d)
+    if (on === has) return
+    // bật: mọi lịch từ ngày d trở đi lùi 1 ngày; tắt: hoàn lại
+    const shift = (x, f) => { if (x && x[f] && (on ? x[f] >= d : x[f] > d)) x[f] = addDays(x[f], on ? 1 : -1) }
+    Object.values(s.reviews || {}).forEach((r) => shift(r, 'due'))
+    Object.values(s.vocab || {}).forEach((v) => shift(v, 'nextReview'))
+    Object.values(s.grammarVerbs || {}).forEach((v) => shift(v, 'due'))
+    s.daysOff = on ? [...s.daysOff, d].sort() : s.daysOff.filter((x) => x !== d)
+  })
+}
+
+// ── Chế độ trả nợ ôn tập: mỗi ngày chỉ đưa ra số bài vừa sức, ưu tiên bài trễ lâu & hay quên
+export const reviewCap = (state = getState()) => Math.max(1, Number(state.settings?.reviewCap) || 15)
+export const vocabCap = (state = getState()) => Math.max(1, Number(state.settings?.vocabCap) || 40)
+function priority(r, t) {
+  const late = Math.max(0, daysBetween(r.due, t))
+  const hard = (2.5 - (r.ease || 2.5)) * 4 + (r.reps === 0 ? 1 : 0)
+  return late + hard
+}
+// Bài ôn của HÔM NAY (đã giới hạn) + phần để dành cho các ngày sau
+export function todayReviews(state = getState(), t = today()) {
+  const all = dueReviews(state, t).sort((a, b) => priority(b, t) - priority(a, t))
+  const cap = reviewCap(state)
+  return { list: all.slice(0, cap), later: all.slice(cap), total: all.length }
 }

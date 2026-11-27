@@ -4,7 +4,7 @@ import { useStore } from '../lib/store'
 import { today, lastNDays, fmtMin } from '../lib/date'
 import { stageCounts, isDue, STAGES } from '../lib/srs'
 import { getSituations } from '../data'
-import { dueReviews } from '../lib/review'
+import { todayReviews } from '../lib/review'
 import { PageHeader, Progress } from '../components/ui'
 
 const PLAN = [
@@ -62,10 +62,11 @@ export default function Dashboard() {
   for (let i = 0; i < 365; i++) {
     const d = lastNDays(i + 1)[0]
     if (fmtMin(s.time[d]?.total) >= 15) streak++
+    else if ((s.daysOff || []).includes(d)) continue // ngày nghỉ đã đánh dấu: không làm đứt chuỗi
     else if (i > 0) break
   }
   const situations = getSituations(s)
-  const lessonDue = dueReviews(s)
+  const lessonDue = todayReviews(s).list
   const listenDone = situations.filter((x) => s.listening[x.id]?.done).length
   const roleplayDone = situations.filter((x) => s.roleplay[x.id]?.count).length
 

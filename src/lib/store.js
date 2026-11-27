@@ -24,6 +24,8 @@ export const defaultSettings = {
   theme: 'system', // 'light' | 'dark' | 'system'
   autoFocusType: true, // tự đặt con trỏ vào ô gõ (máy tính)
   showSentenceVi: true, // hiện nghĩa tiếng Việt của câu ví dụ
+  reviewCap: 15, // số bài ôn tối đa/ngày (chế độ trả nợ)
+  vocabCap: 40, // số cụm từ ôn tối đa/ngày
   newWordsPerDay: 15, // số từ MỚI tối đa/ngày trong Lộ trình từ vựng
   courseUnlocked: 1, // cấp độ cao nhất đã mở khoá thủ công // dùng LanguageTool miễn phí để sửa ngữ pháp
 }
@@ -41,6 +43,7 @@ const initial = {
   customSituations: [], // tình huống do AI tạo / bạn nhập
   customTranslations: [], // đoạn dịch AI tạo thêm
   customUnits: [], // chủ đề từ vựng AI tạo thêm
+  daysOff: [], // ngày nghỉ (chưa kịp học) – lịch ôn đã lùi theo
   customReadings: [], // bài đọc AI tạo thêm
   translations: {}, // đoạn dịch: id -> { attempts, last }
   enrich: {}, // vocabId -> dữ liệu mở rộng do AI tạo

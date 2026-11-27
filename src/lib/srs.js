@@ -102,3 +102,12 @@ export function stageCounts(vocab) {
   Object.values(vocab).forEach((v) => (c[v.stage] = (c[v.stage] || 0) + 1))
   return c
 }
+
+// Giới hạn số cụm từ ôn mỗi ngày (ưu tiên trễ lâu, hay quên, cần kích hoạt lại); phần còn lại để dành hôm sau
+export function capDueVocab(list, cap = Number(getState().settings?.vocabCap) || 40) {
+  const t = today()
+  const vocab = getState().vocab
+  const score = (x) => { const v = vocab[vocabId(x.en)] || x; return sc(v) }
+  const sc = (v) => (v.reactivate ? 100 : 0) + (v.nextReview ? Math.max(0, daysBetween(v.nextReview, t)) : 0) + (v.lapses || 0) * 2
+  return [...list].sort((a, b) => score(b) - score(a)).slice(0, Math.max(1, cap))
+}

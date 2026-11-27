@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { update, useStore, getState } from './lib/store'
 import { today } from './lib/date'
 import { seedVocab, isDue } from './lib/srs'
-import { dueReviews } from './lib/review'
+import { todayReviews, vocabCap, isDayOff } from './lib/review'
 import { getSeedVocabEntries } from './data'
 import { stopSpeaking } from './lib/speech'
 import Dashboard from './modules/Dashboard'
@@ -71,7 +71,8 @@ function useActiveTime(module) {
 }
 
 function countDue(s) {
-  return dueReviews(s).length + Object.values(s.vocab).filter((v) => isDue(v)).length
+  // đã áp giới hạn mỗi ngày (chế độ trả nợ) để số nhắc ôn không phình to khi bạn bận
+  return todayReviews(s).list.length + Math.min(vocabCap(s), Object.values(s.vocab).filter((v) => isDue(v)).length)
 }
 
 // Nhắc ôn: thông báo của trình duyệt khi đến giờ đã chọn (khi web/app đang mở hoặc chạy nền)
@@ -85,7 +86,7 @@ function useReminder() {
       if (!st.reminderOn || typeof Notification === 'undefined' || Notification.permission !== 'granted') return
       const now = new Date()
       const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-      if (hhmm < st.reminderTime || s.lastNotified === today() || n === 0) return
+      if (hhmm < st.reminderTime || s.lastNotified === today() || n === 0 || isDayOff(today(), s)) return
       update((d) => { d.lastNotified = today() })
       try {
         const note = new Notification('📅 English Reflex – đến giờ ôn bài', { body: `Bạn có ${n} mục cần ôn hôm nay. Ôn 15 phút để không quên nhé!`, icon: './icon-192.png', tag: 'er-review' })

@@ -1,4 +1,5 @@
 // MODULE 1: Từ vựng kích hoạt chủ động (Active Recall & Chunking)
+import { vocabCap } from '../lib/review'
 import { useCallback, useMemo, useState } from 'react'
 import { getRecallPrompts, TIERS } from '../data'
 import { scheduleReview, isLessonDue, newStartedToday } from '../lib/review'
@@ -28,6 +29,8 @@ function buildQueue({ tier, mode, size }) {
   const seen = (p) => (s.recall[p.id]?.attempts || 0) > 0
   // Đến hạn ôn: theo lịch của thẻ HOẶC có cụm từ đến hạn
   const due = prompts.filter((p) => seen(p) && (isLessonDue('recall', p.id, s) || p.chunks.some((c) => { const v = s.vocab[vocabId(c.en)]; return v && isDue(v, t) })))
+    .sort((a, b) => (s.reviews[`recall:${a.id}`]?.due || t).localeCompare(s.reviews[`recall:${b.id}`]?.due || t)) // trễ lâu nhất trước
+    .slice(0, Math.max(5, Math.round(vocabCap(s) / 2))) // chế độ trả nợ: không dồn quá nhiều 1 ngày
   // Giới hạn thẻ MỚI mỗi ngày để không học dồn mà quên ôn
   const newLeft = mode === 'review' ? 0 : Math.max(0, s.settings.newRecallPerDay - newStartedToday('recall', s))
   const fresh = prompts.filter((p) => !seen(p)).slice(0, newLeft)

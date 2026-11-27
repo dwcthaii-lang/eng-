@@ -9,6 +9,7 @@ import { scheduleReview, nextDueLabel } from '../lib/review'
 import { chunkUsed, normalize, stem, similarity } from '../lib/text'
 import { speak, stopSpeaking } from '../lib/speech'
 import { aiEnabled, generateUnitItems, generateUnit } from '../lib/ai'
+import { capDueVocab } from '../lib/srs'
 import { useHotkeys } from '../lib/hotkeys'
 import { today } from '../lib/date'
 import { useMic, MicButton, LiveTranscript, TypeFallback } from '../components/Mic'
@@ -36,14 +37,15 @@ function unitStats(unit, vocab) {
   return c
 }
 
-export function courseDueItems(state = getState()) {
+export function courseDueItems(state = getState(), { all = false } = {}) {
   const units = getUnits(state)
   const out = []
   units.forEach((u) => u.items.forEach((it) => {
     const v = state.vocab[vocabId(it.en)]
     if (v && v.sources.includes(src(u.id)) && isDue(v)) out.push({ ...it, unitId: u.id })
   }))
-  return [...new Map(out.map((x) => [x.en, x])).values()]
+  const uniq = [...new Map(out.map((x) => [x.en, x])).values()]
+  return all ? uniq : capDueVocab(uniq) // chế độ trả nợ: mỗi ngày tối đa N từ, phần còn lại để dành
 }
 
 function levelUnlocked(level, units, vocab, manual) {
